@@ -46,13 +46,12 @@ constexpr uint8 k_gridWidth = 10;
 constexpr uint8 k_gridHeight = 24;
 constexpr uint8 k_defaultPieceSpawnX = 3;
 constexpr uint8 k_defaultPieceSpawnY = 21;  // Top 4 rows are hidden
-constexpr uint8 k_softDropSpeedScalar = 20;
+constexpr uint8 k_softDropSpeedScalar = 15;  // TODO: Reevaluate how soft drop speed is calculated to ensure it scales with speed correctly
 
 // Guideline: ~0.3s before auto-repeat kicks in. 72 ticks = 0.3s. This likely wants to be an integer multiple of k_gameTicksPerFrame.
-constexpr GameTicks k_autoRepeatFirstDelayTicks = 60; // 60 ticks = 0.25s
+constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
 // Guideline: ~0.5s to move Tetrimino from one side to the other.
-// That's ~7 moves in 0.5s. If first move delay is 0.3s, there's 0.2s for the remaining 6, or 1/30s per move.
-constexpr GameTicks k_autoRepeatContinueDelayTicks = 8; // 8 ticks = 2 frames = 1/30s
+constexpr GameTicks k_autoRepeatContinueDelayTicks = 12; // 12 ticks = 3 frames @ 60fps = 0.05s
 
 //     Top of screen (0)-- *                              *
 //                         *                              *
@@ -109,6 +108,24 @@ enum class GameOverReason : uint8
   BlockOut, // A piece overlapped with a block on the grid immediately when spawned
 };
 
+// Enum of piece orientation. North (0) is default. The rest are ordered clockwise.
+enum class PieceOrientation : uint8
+{
+  North,
+  East,
+  South,
+  West,
+  Count
+};
+
+// 2x4 pieces ("I" and "O") use one rotation formula, while
+// 2x4 pieces ("T", "L", "J", "S", and "Z") use another
+enum class RotationFormula : uint8
+{
+  Rotation2x4,
+  Rotation2x3,
+};
+
 class Random
 {
 public:
@@ -150,14 +167,21 @@ private:
 class PieceData
 {
 public:
-  PieceData(int defaultBlockPositions) :
-    m_defaultBlockPositions(defaultBlockPositions)
+  PieceData(int defaultBlockPositions, RotationFormula rotationFormula) :
+    m_defaultBlockPositions(defaultBlockPositions),
+    m_rotationFormula(rotationFormula)
   {
     // TODO: Assert that exactly four bits are set
   }
 
   // The number of blocks per piece is hard-coded, but the API shouldn't care
   constexpr uint8 GetNumBlocksInPiece() { return 4; }
+
+  // orientation : Orientation of the piece to check (North is default)
+  // pieceX, pieceY : (x, y) grid position of piece origin to check 
+  // Returns 'true' if all blocks of this piece at this location and orientation are empty in the grid
+  // Returns 'false' if something in the grid would block the piece from being here
+  bool DoesPieceFitInGrid(PieceOrientation orientation, uint8 pieceX, uint8 pieceY) const;
 
   // blockIndex : Value in range [0 .. GetNumBlocksInPiece), identifying the block
   // outOffsetX :
@@ -166,38 +190,23 @@ public:
   // (0, 0) is the bottom-left bit
   // 4567
   // 0123
-  void GetBlockOffsetForIndex(int8 blockIndex, uint8& outOffsetX, uint8& outOffsetY) const
-  {
-    // WARNING - Bad data or bad input will cause this to hang!
-    int8 bitIndex = -1;
-    do
-    {
-      do
-      {
-        bitIndex++;
-        Assert(bitIndex < 8, "m_defaultBlockPositions and/or blockIndex were bad");
-      } while ((m_defaultBlockPositions & (uint8(0x01) << bitIndex)) == 0);
-      blockIndex--;
-    } while (blockIndex >= 0);
-    outOffsetX = bitIndex & 0x03;
-    outOffsetY = bitIndex / 4;
-  }
+  void GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientation orientation, uint8& outOffsetX, uint8& outOffsetY) const;
 private:
   // Bit mask describing piece's blocks in its default orientation.
   uint8 m_defaultBlockPositions;
+  // Note: There are only two options, so this could be reduced to just one bit
+  RotationFormula m_rotationFormula;
 };
 
 class CurrentPiece
 {
 public:
   inline const PieceData& GetPieceData() const;
-  
+
+  // Minimal code to clear the CurrentPiece. If m_pieceIndex is Invalid, all other data is considered invalid too.
+  // Everything else is expected to be initialized in SpawnNewPiece
   void Reset() { m_pieceIndex = PieceIndex::Invalid; }
 
-  // Checks if all the blocks this piece would occupy at its current position + (deltaX, deltaY) are empty
-  // Returns 'true' if the grid is empty and the piece would fit, 'false' if it's blocked
-  bool IsGridEmpty(int8 deltaX, int8 deltaY) const;
-  
   // Spawns a new piece at the top of the grid.
   // Returns 'true' if piece spawned without errors
   // Returns 'false' if there were any problems (ie. game over condition)
@@ -206,6 +215,8 @@ public:
   void Draw() const;
   void MoveDown(bool isSoftDrop);
   bool TryMove(int8 deltaX, int8 deltaY);
+  // rotationDelta: +1 = clockwise; -1 = counter-clockwise
+  bool TryRotate(int8 rotationDelta);
 
 protected:
   // Writes the current piece to the grid and invalidates the current piece
@@ -215,6 +226,7 @@ private:
   PieceIndex m_pieceIndex;
   uint8 m_x;
   uint8 m_y;
+  PieceOrientation m_orientation;
   // How many GameTicks until this piece falls to the next line
   GameTicks m_ticksToFall;
 };
@@ -231,9 +243,11 @@ private:
   static uint8 ProcessMoveHorizontal(uint8 button, uint8& out_ticksUntilAutoRepeat);
   
 private:
-  bool m_isSoftDrop;
   GameTicks m_ticksUntilAutoRepeatLeft;
   GameTicks m_ticksUntilAutoRepeatRight;
+  bool m_isSoftDrop;
+  bool m_cwButtonWasDown;
+  bool m_ccwButtonWasDown;
 };
 
 class GameMode
@@ -241,8 +255,6 @@ class GameMode
 public:
   // Returns how many GameTicks it takes for a piece to fall one line with no input
   GameTicks GetFallTime() const;
-  // GameTicks for a piece to fall one line with Soft Drop input enabled
-  GameTicks GetSoftDropTime() const { return GetFallTime() / k_softDropSpeedScalar; }
 
   void Reset() { m_level = 0; }
   void NextLevel() { m_level++; }
@@ -261,7 +273,13 @@ class Controller g_controller;
 class GameMode g_gameMode;
 
 class PieceData g_pieceData[] = {
-  0x66, 0x0F, 0x27, 0x47, 0x17, 0x63, 0x36
+  {0x66, RotationFormula::Rotation2x4},
+  {0x0F, RotationFormula::Rotation2x4},
+  {0x27, RotationFormula::Rotation2x3},
+  {0x47, RotationFormula::Rotation2x3},
+  {0x17, RotationFormula::Rotation2x3},
+  {0x63, RotationFormula::Rotation2x3},
+  {0x36, RotationFormula::Rotation2x3},
 };
 static_assert(countof(g_pieceData) == uint8(PieceIndex::Count));
 //--------------------------------------------------------------------------
@@ -453,29 +471,71 @@ void Grid::ProcessFullLines()
   }
 }
 
-const PieceData& CurrentPiece::GetPieceData() const
+bool PieceData::DoesPieceFitInGrid(PieceOrientation orientation, uint8 pieceX, uint8 pieceY) const
 {
-  return g_pieceData[uint8(m_pieceIndex)];
-}
-
-bool CurrentPiece::IsGridEmpty(int8 deltaX, int8 deltaY) const
-{
-  const PieceData& pieceData = GetPieceData();
-  for (uint8 blockIndex = 0; blockIndex < pieceData.GetNumBlocksInPiece(); blockIndex++)
+  uint8 blockOffsetX;
+  uint8 blockOffsetY;
+  for (uint8 blockIndex = 0; blockIndex < GetNumBlocksInPiece(); blockIndex++)
   {
-    uint8 blockOffsetX;
-    uint8 blockOffsetY;
-    pieceData.GetBlockOffsetForIndex(blockIndex, blockOffsetX, blockOffsetY);
-    uint8 testX = m_x + deltaX + blockOffsetX;
-    uint8 testY = m_y + deltaY + blockOffsetY;
+    GetBlockOffsetForIndexAndRotation(blockIndex, orientation, blockOffsetX, blockOffsetY);
+    uint8 testX = pieceX + blockOffsetX;
+    uint8 testY = pieceY + blockOffsetY;
     if (!(g_grid.IsValidPosition(testX, testY) && g_grid.IsEmpty(testX, testY)))
     {
-      // Something is blocking this move; early-out
+      // Something is blocking this piece; early-out
       return false;
     }
   }
   // Nothing blocked the piece
   return true;
+}
+
+void PieceData::GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientation orientation, uint8& outOffsetX, uint8& outOffsetY) const
+{
+  // WARNING - Bad data or bad input will cause this to hang!
+  int8 bitIndex = -1;
+  do
+  {
+    do
+    {
+      bitIndex++;
+      Assert(bitIndex < 8, "m_defaultBlockPositions and/or blockIndex were bad");
+    } while ((m_defaultBlockPositions & (uint8(0x01) << bitIndex)) == 0);
+    blockIndex--;
+  } while (blockIndex >= 0);
+
+  uint8 m4 = bitIndex & 0x03;   // m4 = bitIndex % 4;
+  uint8 d4 = bitIndex / 4;      // d4 = bitIndex / 4;
+
+  Assert(m_rotationFormula == RotationFormula::Rotation2x4 || m_rotationFormula == RotationFormula::Rotation2x3);
+  // Rotation of 2x3 blocks is very similar to 2x4. Rather than having two separate
+  // calculations, the differences are encapsulated in a few targeted fixups
+  int8 fixup = (m_rotationFormula == RotationFormula::Rotation2x4) ? 0 : -1;
+  switch (orientation)
+  {
+    case PieceOrientation::North:
+      outOffsetX = m4;
+      outOffsetY = d4 + 1;
+      break;
+    case PieceOrientation::East:
+      outOffsetX = d4 + 1;
+      outOffsetY = (3 - m4) + fixup;
+      break;
+    case PieceOrientation::South:
+      outOffsetX = (3 - m4) + fixup;
+      outOffsetY = (2 - d4) + fixup;
+      break;
+    case PieceOrientation::West:
+      outOffsetX = (2 - d4) + fixup;
+      outOffsetY = m4;
+      break;
+  }
+}
+
+
+const PieceData& CurrentPiece::GetPieceData() const
+{
+  return g_pieceData[uint8(m_pieceIndex)];
 }
 
 bool CurrentPiece::SpawnNewPiece()
@@ -484,6 +544,7 @@ bool CurrentPiece::SpawnNewPiece()
   m_pieceIndex = PieceIndex(random(0, uint32(PieceIndex::Count)));
   m_x = k_defaultPieceSpawnX;
   m_y = k_defaultPieceSpawnY;
+  m_orientation = PieceOrientation::North;
   m_ticksToFall = g_gameMode.GetFallTime();
 
 #ifdef DEBUGGING_ENABLED
@@ -493,7 +554,7 @@ bool CurrentPiece::SpawnNewPiece()
 #endif // #ifdef DEBUGGING_ENABLED
   
   // Check if new piece overlaps with anything on the board
-  return IsGridEmpty(0, 0);
+  return GetPieceData().DoesPieceFitInGrid(m_orientation, m_x, m_y);
 }
 
 void CurrentPiece::Draw() const
@@ -505,7 +566,7 @@ void CurrentPiece::Draw() const
     {
       uint8 x;
       uint8 y;
-      pieceData.GetBlockOffsetForIndex(i, x, y);
+      pieceData.GetBlockOffsetForIndexAndRotation(i, m_orientation, x, y);
       // TODO: Compute BlockIndex once a variety of blocks are supported
       BlockIndex block = 1;
       DrawBlock(m_x + x, m_y + y, block);
@@ -544,10 +605,10 @@ void CurrentPiece::MoveDown(bool isSoftDrop)
   }
 }
 
-//Return 'true' if move was successful
+// Return 'true' if move was successful
 bool CurrentPiece::TryMove(int8 deltaX, int8 deltaY)
 {
-  if (IsGridEmpty(deltaX, deltaY))
+  if (GetPieceData().DoesPieceFitInGrid(m_orientation, m_x + deltaX, m_y + deltaY))
   {
     // All the checks passed; move the piece
     m_x += deltaX;
@@ -559,6 +620,21 @@ bool CurrentPiece::TryMove(int8 deltaX, int8 deltaY)
   return false;
 }
 
+// Return 'true' if rotation was successful
+bool CurrentPiece::TryRotate(int8 rotationDelta)
+{
+  Assert(int8(PieceOrientation::Count) + rotationDelta >= 0);
+  PieceOrientation testOrientation = PieceOrientation((int8(m_orientation) + rotationDelta + int8(PieceOrientation::Count)) % int8(PieceOrientation::Count));
+  if (GetPieceData().DoesPieceFitInGrid(testOrientation, m_x, m_y))
+  {
+    m_orientation = testOrientation;
+    // Rotation succeeded; return true
+    return true;
+  }
+  // Rotation failed; return false
+  return false;
+}
+
 void CurrentPiece::LockPieceInGrid()
 {
   // Write all the blocks to the grid
@@ -567,7 +643,7 @@ void CurrentPiece::LockPieceInGrid()
   {
     uint8 blockOffsetX;
     uint8 blockOffsetY;
-    pieceData.GetBlockOffsetForIndex(blockIndex, blockOffsetX, blockOffsetY);
+    pieceData.GetBlockOffsetForIndexAndRotation(blockIndex, m_orientation, blockOffsetX, blockOffsetY);
     g_grid.Set(m_x + blockOffsetX, m_y + blockOffsetY, 1);
   }
 
@@ -615,6 +691,7 @@ uint8 Controller::ProcessMoveHorizontal(uint8 button, uint8& out_ticksUntilAutoR
 
 void Controller::ProcessInput()
 {
+  // Handle horizontal input and movement
   int8 moveAmount = 0;
   moveAmount -= ProcessMoveHorizontal(LEFT_BUTTON, m_ticksUntilAutoRepeatLeft);
   moveAmount += ProcessMoveHorizontal(RIGHT_BUTTON, m_ticksUntilAutoRepeatRight);
@@ -625,7 +702,23 @@ void Controller::ProcessInput()
     g_currentPiece.TryMove(moveDelta, 0);
     moveAmount -= moveDelta;
   }
+
+  // Handle rotation input
+  bool cwButtonDown = arduboy.pressed(B_BUTTON);
+  if (cwButtonDown & !m_cwButtonWasDown)
+  {
+    g_currentPiece.TryRotate(+1);
+  }
+  m_cwButtonWasDown = cwButtonDown;
   
+  bool ccwButtonDown = arduboy.pressed(A_BUTTON);
+  if (ccwButtonDown & !m_ccwButtonWasDown)
+  {
+    g_currentPiece.TryRotate(-1);
+  }
+  m_ccwButtonWasDown = ccwButtonDown;
+
+  // Handle drop input
   m_isSoftDrop = arduboy.pressed(DOWN_BUTTON);
 }
 
