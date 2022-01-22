@@ -1,0 +1,3 @@
+- [ ] Tetromino basic rotation
+	- [ ] "Correct" clockwise and counter-clockwise rotations for all Tetriminos
+	- No kicks or alternate placements

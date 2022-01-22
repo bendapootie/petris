@@ -1,0 +1,23 @@
+- [ ] Move to github (?)... or at least split into better notes, here in the Tasks folder
+- [x] 1) [Basic controls and behavior](done/Basic%20controls%20and%20behavior.md)
+- [x] 2) [Tetriminos and end of game](done/Tetriminos%20and%20end%20of%20game.md)
+
+4. SRS Rotation
+5. Wall and floor kicks
+6. Next
+7. 5 Next
+8. 7-Bucket
+9. Hold
+10. Piece visuals
+11. Track and display stats
+	- [ ] Lines completed
+	- [ ] Piece distribution
+	- [ ] Line stats
+12. Increase level on line counts
+13. Score (basic)
+14. Score (advanced)
+	- [ ] Full standard Tetris scoring (t-spins, B2B, combos, etc...)
+15. "Fancy" line clear visuals
+
+Things to consider
+- Make DAS (Delayed Auto Shift) initial delay and repeat delay scale with game speed
