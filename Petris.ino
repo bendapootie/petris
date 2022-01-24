@@ -51,7 +51,7 @@ constexpr uint8 k_gridWidth = 10;
 constexpr uint8 k_gridHeight = 24;
 constexpr uint8 k_defaultPieceSpawnX = 3;
 constexpr uint8 k_defaultPieceSpawnY = 21;  // Top 4 rows are hidden
-constexpr uint8 k_softDropSpeedScalar = 15;  // TODO: Reevaluate how soft drop speed is calculated to ensure it scales with speed correctly
+constexpr uint8 k_softDropSpeedScalar = 20;  // TODO: Reevaluate how soft drop speed is calculated to ensure it scales with speed correctly
 
 // Guideline: ~0.3s before auto-repeat kicks in. 72 ticks = 0.3s. This likely wants to be an integer multiple of k_gameTicksPerFrame.
 constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
@@ -460,7 +460,7 @@ void ResetGame()
   g_gameState = GameState::Playing;
 
   // TODO: Randomize things better. Maybe take into acount player input?
-//  arduboy.initRandomSeed();
+  arduboy.initRandomSeed();
 
   g_currentPiece.Reset();
   g_controller.Reset();
@@ -729,7 +729,7 @@ void CurrentPiece::MoveDown(bool isSoftDrop)
       {
         // Piece moved one line down. Subtract any remaining ticks to fall from the total to count and continue looping.
         ticksToSubtract -= m_ticksToFall;
-        m_ticksToFall += g_gameMode.GetFallTime();
+        m_ticksToFall = g_gameMode.GetFallTime();
       }
       else
       {
