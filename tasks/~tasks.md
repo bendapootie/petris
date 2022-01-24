@@ -2,8 +2,8 @@
 - [x] 1) [Basic controls and behavior](done/Basic%20controls%20and%20behavior.md)
 - [x] 2) [Tetriminos and end of game](done/Tetriminos%20and%20end%20of%20game.md)
 - [x] 3) Basic Rotation
-- [ ] 4) SRS Rotation
-- [ ] 5) Wall and floor kicks
+- [x] 4) SRS Rotation
+- [x] 5) Wall and floor kicks (implemented as part of SRS Rotation)
 - [ ] 6) Next
 - [ ] 7) 5 Next
 - [ ] 8) 7-Bucket

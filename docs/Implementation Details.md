@@ -2,8 +2,8 @@
 ## Spawning
 This is the default (aka North) orientation for each of the Tetriminos
 ```Tetriminos
--XX- ---- -X-- --X- X--- -XX- XX--
--XX- XXXX XXX- XXX- XXX- XX-- -XX-
+-XX- XXXX -X-- --X- X--- -XX- XX--
+-XX- ---- XXX- XXX- XXX- XX-- -XX-
 ```
 
 ## Internal Representation
@@ -17,7 +17,7 @@ Example :
             OOO-   012-
 
 O = 0110 0110 = 0x66
-I = 0000 1111 = 0x0F
+I = 1111 0000 = 0xF0
 T = 0010 0111 = 0x27
 L = 0100 0111 = 0x47
 J = 0001 0111 = 0x17
@@ -38,12 +38,12 @@ North   East    South   West
 -12-    .26.    -65-    .51.
 ....    .--.    ....    .--.
 
-I = 0000 1111 = 0x0F
+I = 1111 0000 = 0xF0
 North   East    South   West
-....    .0-.    ....    .-3.
-----    .1-.    3210    .-2.
-0123    .2-.    ----    .-1.
-....    .3-.    ....    .-0.
+....    .-4.    ....    .7-.
+4567    .-5.    ----    .6-.
+----    .-6.    7654    .5-.
+....    .-7.    ....    .4-.
 
 Formula A
 North = (bit % 4      , (bit / 4) + 1)
