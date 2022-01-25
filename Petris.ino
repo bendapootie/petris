@@ -279,6 +279,7 @@ public:
   bool SpawnNewPiece();
   bool IsValidPiece() { return m_pieceIndex != PieceIndex::Invalid; }
   void Draw() const;
+  void DrawShadow() const;
   void MoveDown(bool isSoftDrop);
   bool TryMove(int8 deltaX, int8 deltaY);
   // rotationDirection: clockwise or counter-clockwise
@@ -493,6 +494,7 @@ void PlayingLoop()
 
   // TODO: Don't draw the entire grid every frame when it hasn't changed
   g_grid.Draw();
+  g_currentPiece.DrawShadow();
   g_currentPiece.Draw();
 }
 
@@ -698,6 +700,31 @@ void CurrentPiece::Draw() const
       // TODO: Compute BlockIndex once a variety of blocks are supported
       BlockIndex block = 1;
       DrawBlock(m_x + x, m_y + y, block);
+    }
+  }
+}
+
+void CurrentPiece::DrawShadow() const
+{
+  // TODO: Merge this function with Draw()
+  if (m_pieceIndex != PieceIndex::Invalid)
+  {
+    const PieceData& pieceData = GetPieceData();
+    uint8 shadowY = m_y;
+    while (pieceData.DoesPieceFitInGrid(m_orientation, m_x, shadowY - 1))
+    {
+      shadowY--;
+    }
+    if (shadowY != m_y)
+    {
+      for (uint8 i = 0; i < pieceData.GetNumBlocksInPiece(); i++)
+      {
+        uint8 x;
+        uint8 y;
+        pieceData.GetBlockOffsetForIndexAndRotation(i, m_orientation, x, y);
+        BlockIndex shadowBlockIndex = 2;
+        DrawBlock(m_x + x, shadowY + y, shadowBlockIndex);
+      }
     }
   }
 }
