@@ -253,6 +253,8 @@ public:
 
   // Returns the RotationOffsets data associated with this PieceData. It will be null if there aren't alternate rotations for the piece.
   const RotationOffsets* GetRotationOffsets() const { return m_rotationOffsets; }
+
+  void Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex) const;
   
 private:
   // Data that describes alternative rotation offsets for the piece.
@@ -281,6 +283,7 @@ public:
   void Draw() const;
   void DrawShadow() const;
   void MoveDown(bool isSoftDrop);
+  void DoHardDrop();
   bool TryMove(int8 deltaX, int8 deltaY);
   // rotationDirection: clockwise or counter-clockwise
   bool TryRotate(RotationDirection rotationDirection);
@@ -298,6 +301,21 @@ private:
   GameTicks m_ticksToFall;
 };
 
+// Manages the next piece and whatever randomization method is used to pick them
+class Next
+{
+public:
+  void Reset();
+  PieceIndex GetNextPiece();
+  void Draw(BlockIndex blockIndex) const;
+  
+private:
+  void ShuffleBag(uint8 startingIndex);
+private:
+  PieceIndex m_next[11];
+  uint8 m_index;
+};
+
 class Controller
 {
 public:
@@ -313,6 +331,7 @@ private:
   GameTicks m_ticksUntilAutoRepeatLeft;
   GameTicks m_ticksUntilAutoRepeatRight;
   bool m_isSoftDrop;
+  bool m_hardDropButtonWasDown;
   bool m_cwButtonWasDown;
   bool m_ccwButtonWasDown;
 };
@@ -336,6 +355,7 @@ class Arduboy2 arduboy;
 GameState g_gameState;
 class Grid g_grid;
 class CurrentPiece g_currentPiece;
+class Next g_next;
 class Controller g_controller;
 class GameMode g_gameMode;
 
@@ -460,9 +480,7 @@ void ResetGame()
   // TODO: This should be incorporated into GameMode
   g_gameState = GameState::Playing;
 
-  // TODO: Randomize things better. Maybe take into acount player input?
-  arduboy.initRandomSeed();
-
+  g_next.Reset();
   g_currentPiece.Reset();
   g_controller.Reset();
 }
@@ -662,6 +680,17 @@ void PieceData::GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientat
   }
 }
 
+void PieceData::Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex) const
+{
+  uint8 dx;
+  uint8 dy;
+  for (uint8 i = 0; i < GetNumBlocksInPiece(); i++)
+  {
+    GetBlockOffsetForIndexAndRotation(i, orientation, dx, dy);
+    DrawBlock(x + dx, y + dy, blockIndex);
+  }
+}
+
 
 const PieceData& CurrentPiece::GetPieceData() const
 {
@@ -671,7 +700,7 @@ const PieceData& CurrentPiece::GetPieceData() const
 bool CurrentPiece::SpawnNewPiece()
 {
   // TODO: Pull next piece from 7-bag (or other randomization abstraction)
-  m_pieceIndex = PieceIndex(random(0, uint32(PieceIndex::Count)));
+  m_pieceIndex = g_next.GetNextPiece();
   m_x = k_defaultPieceSpawnX;
   m_y = k_defaultPieceSpawnY;
   m_orientation = PieceOrientation::North;
@@ -691,16 +720,8 @@ void CurrentPiece::Draw() const
 {
   if (m_pieceIndex != PieceIndex::Invalid)
   {
-    const PieceData& pieceData = GetPieceData();
-    for (uint8 i = 0; i < pieceData.GetNumBlocksInPiece(); i++)
-    {
-      uint8 x;
-      uint8 y;
-      pieceData.GetBlockOffsetForIndexAndRotation(i, m_orientation, x, y);
-      // TODO: Compute BlockIndex once a variety of blocks are supported
-      BlockIndex block = 1;
-      DrawBlock(m_x + x, m_y + y, block);
-    }
+    const BlockIndex blockIndex = 1;
+    GetPieceData().Draw(m_x, m_y, m_orientation, blockIndex);
   }
 }
 
@@ -717,14 +738,8 @@ void CurrentPiece::DrawShadow() const
     }
     if (shadowY != m_y)
     {
-      for (uint8 i = 0; i < pieceData.GetNumBlocksInPiece(); i++)
-      {
-        uint8 x;
-        uint8 y;
-        pieceData.GetBlockOffsetForIndexAndRotation(i, m_orientation, x, y);
-        BlockIndex shadowBlockIndex = 2;
-        DrawBlock(m_x + x, shadowY + y, shadowBlockIndex);
-      }
+      const BlockIndex shadowBlockIndex = 2;
+      pieceData.Draw(m_x, shadowY, m_orientation, shadowBlockIndex);
     }
   }
 }
@@ -766,6 +781,14 @@ void CurrentPiece::MoveDown(bool isSoftDrop)
       }
     }
   }
+}
+
+void CurrentPiece::DoHardDrop()
+{
+  while (TryMove(0, -1))
+  {
+  }
+  LockPieceInGrid();
 }
 
 // Return 'true' if move was successful
@@ -847,6 +870,48 @@ void CurrentPiece::LockPieceInGrid()
 }
 
 
+void Next::Reset()
+{
+  // TODO: Randomize things better. Maybe take into acount player input?
+  arduboy.initRandomSeed();
+  GetNextPiece();
+}
+
+PieceIndex Next::GetNextPiece()
+{
+  // Hacky way to clear the previous "Next" display. First clear the old display, then draw the new one.
+  // It's nice in that it only updates the display when something changes, but drawing in GetNextPiece feels dirty.
+  Draw(0);
+  PieceIndex nextPiece = m_next[0];
+  m_next[0] = PieceIndex(random(0, uint32(PieceIndex::Count)));
+  Draw(1);
+  return nextPiece;
+}
+
+void Next::Draw(BlockIndex blockIndex) const
+{
+  const PieceData& pieceData = g_pieceData[uint8(m_next[0])];
+  // TODO: What block index should be used for the Next display?
+  pieceData.Draw(12, 18, PieceOrientation::North, blockIndex);
+}
+
+void Next::ShuffleBag(uint8 startingIndex)
+{
+  Assert(startingIndex < countof(m_next) - uint8(PieceIndex::Count));
+  // Put one of each piece in the "bag"
+  for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
+  {
+    m_next[i + startingIndex] = PieceIndex(i);
+  }
+
+  // Shuffle the bag
+  for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
+  {
+    
+  }
+}
+
+
 // button: The input button to query (ie. LEFT_BUTTON, or RIGHT_BUTTON
 // moveDirection: Expected to be -1 if input moves piece left and +1 if input moves piece right
 // out_ticksUntilAutoRepeat: in/out parameter of the variable tracking auto repeat time
@@ -900,14 +965,14 @@ void Controller::ProcessInput()
 
   // Handle rotation input
   bool cwButtonDown = arduboy.pressed(B_BUTTON);
-  if (cwButtonDown & !m_cwButtonWasDown)
+  if (cwButtonDown && !m_cwButtonWasDown)
   {
     g_currentPiece.TryRotate(RotationDirection::Clockwise);
   }
   m_cwButtonWasDown = cwButtonDown;
   
   bool ccwButtonDown = arduboy.pressed(A_BUTTON);
-  if (ccwButtonDown & !m_ccwButtonWasDown)
+  if (ccwButtonDown && !m_ccwButtonWasDown)
   {
     g_currentPiece.TryRotate(RotationDirection::CounterClockwise);
   }
@@ -915,6 +980,13 @@ void Controller::ProcessInput()
 
   // Handle drop input
   m_isSoftDrop = arduboy.pressed(DOWN_BUTTON);
+
+  bool hardDropButtonDown = arduboy.pressed(UP_BUTTON);
+  if (hardDropButtonDown && !m_hardDropButtonWasDown)
+  {
+    g_currentPiece.DoHardDrop();
+  }
+  m_hardDropButtonWasDown = hardDropButtonDown;
 }
 
 uint8 GameMode::GetFallTime() const

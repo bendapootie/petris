@@ -4,7 +4,7 @@
 - [x] 3) Basic Rotation
 - [x] 4) SRS Rotation
 - [x] 5) Wall and floor kicks (implemented as part of SRS Rotation)
-- [ ] 6) Next
+- [x] 6) Next
 - [ ] 7) 5 Next
 - [ ] 8) 7-Bucket
 - [ ] 9) Hold
