@@ -5,8 +5,8 @@
 - [x] 4) SRS Rotation
 - [x] 5) Wall and floor kicks (implemented as part of SRS Rotation)
 - [x] 6) Next
-- [ ] 7) 5 Next
-- [ ] 8) 7-Bucket
+- [x] 7) 5 Next
+- [x] 8) 7-Bucket
 - [ ] 9) Hold
 - [ ] 10)Piece visuals
 - [ ] 11) Track and display stats

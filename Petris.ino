@@ -80,6 +80,9 @@ constexpr uint8 k_borderBottomPos = k_screenHeight - 1;
 constexpr uint8 k_gridBottomPos = k_borderBottomPos - k_blockHeight;
 constexpr uint8 k_gridLeftPos = (k_screenWidth / 2) - (k_playspaceWidth / 2);
 
+constexpr uint8 k_numNextPiecesToShow = 5;
+static_assert(k_numNextPiecesToShow <= 5, "Current implementation of 7-bag piece randomization doesn't support looking ahead more than 5 pieces");
+
 // Type-safe enum for tracking Tetrimino indices
 // Note: There are 7 options, so even with an extra entry for "None", this could be stored in 3-bits
 enum class PieceIndex : uint8
@@ -475,6 +478,8 @@ void loop()
 
 void ResetGame()
 {
+  arduboy.clear();
+  
   g_grid.Clear();
   g_gameMode.Reset();
   // TODO: This should be incorporated into GameMode
@@ -874,7 +879,8 @@ void Next::Reset()
 {
   // TODO: Randomize things better. Maybe take into acount player input?
   arduboy.initRandomSeed();
-  GetNextPiece();
+  ShuffleBag(0);
+  m_index = 0;
 }
 
 PieceIndex Next::GetNextPiece()
@@ -882,17 +888,33 @@ PieceIndex Next::GetNextPiece()
   // Hacky way to clear the previous "Next" display. First clear the old display, then draw the new one.
   // It's nice in that it only updates the display when something changes, but drawing in GetNextPiece feels dirty.
   Draw(0);
-  PieceIndex nextPiece = m_next[0];
-  m_next[0] = PieceIndex(random(0, uint32(PieceIndex::Count)));
+  PieceIndex nextPiece = m_next[m_index];
+  m_index++;
+  // TODO: Make this magic number a constant or computed?
+  // If the index has progressed this far, another bag needs to be randomized
+  if (m_index >= 3)
+  {
+    // This is likely less code than a loop to copy, or to treat the whole think like a ring buffer
+    m_next[0] = m_next[3];
+    m_next[1] = m_next[4];
+    m_next[2] = m_next[5];
+    m_next[3] = m_next[6];
+    ShuffleBag(4);
+    m_index = 0;
+  }
   Draw(1);
   return nextPiece;
 }
 
 void Next::Draw(BlockIndex blockIndex) const
 {
-  const PieceData& pieceData = g_pieceData[uint8(m_next[0])];
-  // TODO: What block index should be used for the Next display?
-  pieceData.Draw(12, 18, PieceOrientation::North, blockIndex);
+  for (uint8 i = 0; i < k_numNextPiecesToShow; i++)
+  {
+    const PieceData& pieceData = g_pieceData[uint8(m_next[m_index + i])];
+    // TODO: What block index should be used for the Next display?
+    // TODO: Formalize the position of these draws
+    pieceData.Draw(12, 18 - (i * 3), PieceOrientation::North, blockIndex);
+  }
 }
 
 void Next::ShuffleBag(uint8 startingIndex)
@@ -907,7 +929,10 @@ void Next::ShuffleBag(uint8 startingIndex)
   // Shuffle the bag
   for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
   {
-    
+    uint8 swapIndex = random(i, uint32(PieceIndex::Count));
+    PieceIndex temp = m_next[i + startingIndex];
+    m_next[i + startingIndex] = m_next[swapIndex + startingIndex];
+    m_next[swapIndex + startingIndex] = temp;
   }
 }
 
