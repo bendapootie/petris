@@ -41,7 +41,8 @@ constexpr uint8 k_rotateCcwButton = A_BUTTON;
 constexpr uint8 k_leftButton = LEFT_BUTTON;
 constexpr uint8 k_rightButton = RIGHT_BUTTON;
 constexpr uint8 k_softDropButton = DOWN_BUTTON;
-constexpr uint8 k_hardDropButton = 0x00;
+constexpr uint8 k_hardDropButton = 0xFF;  // There's not a good button for hard drop. I'd prefer to have "hold" than hard drop
+constexpr uint8 k_holdButton = UP_BUTTON;
 
 constexpr uint8 k_frameRate = 60;
 constexpr uint8 k_screenWidth = 128;
@@ -288,12 +289,13 @@ public:
   {
     m_pieceIndex = PieceIndex::Invalid;
     m_holdPiece = PieceIndex::Invalid;
+    m_holdActionAvailable = true;
   }
 
   // Spawns a new piece at the top of the grid.
   // Returns 'true' if piece spawned without errors
   // Returns 'false' if there were any problems (ie. game over condition)
-  bool SpawnNewPiece();
+  bool SpawnNewPiece(PieceIndex knownNextPiece = PieceIndex::Invalid);
   bool IsValidPiece() { return m_pieceIndex != PieceIndex::Invalid; }
   void Draw() const;
   void DrawShadow() const;
@@ -302,6 +304,9 @@ public:
   bool TryMove(int8 deltaX, int8 deltaY);
   // rotationDirection: clockwise or counter-clockwise
   bool TryRotate(RotationDirection rotationDirection);
+  // Tries to hold the current piece. If it can, the current piece is saved in m_holdPiece and then invalidated
+  // and the hold piece is returned
+  PieceIndex TryHold();
 
 protected:
   // Writes the current piece to the grid and invalidates the current piece
@@ -315,6 +320,7 @@ private:
   PieceOrientation m_orientation;
   // How many GameTicks until this piece falls to the next line
   GameTicks m_ticksToFall;
+  bool m_holdActionAvailable;
 };
 
 // Manages the next piece and whatever randomization method is used to pick them
@@ -499,11 +505,20 @@ void ResetGame()
 void PlayingLoop()
 {
   GameOverReason gameOverReason = GameOverReason::None;
+
+  // "Hold" piece support
+  PieceIndex knownNextPiece = PieceIndex::Invalid;
+  if (arduboy.pressed(k_holdButton))
+  {
+    // Hold is allowed to be used once per drop. It won't do anything if it's already been used.
+    knownNextPiece = g_currentPiece.TryHold();
+  }
+  
   if (!g_currentPiece.IsValidPiece())
   {
     // Test for, and remove full lines
     g_grid.ProcessFullLines();
-    const bool spawnSuccess = g_currentPiece.SpawnNewPiece();
+    const bool spawnSuccess = g_currentPiece.SpawnNewPiece(knownNextPiece);
     if (!spawnSuccess)
     {
       gameOverReason = GameOverReason::BlockOut;
@@ -708,10 +723,19 @@ const PieceData& CurrentPiece::GetPieceData() const
   return g_pieceData[uint8(m_pieceIndex)];
 }
 
-bool CurrentPiece::SpawnNewPiece()
+bool CurrentPiece::SpawnNewPiece(PieceIndex knownNextPiece)
 {
-  // TODO: Pull next piece from 7-bag (or other randomization abstraction)
-  m_pieceIndex = g_next.GetNextPiece();
+  if (knownNextPiece != PieceIndex::Invalid)
+  {
+    // Assume this came from the hold piece, so the hold action doesn't get reset
+    m_pieceIndex = knownNextPiece;
+    DebugPrint("NextPieceFromHold");
+  }
+  else
+  {
+    // Pull next piece from 7-bag (or other randomization abstraction)
+    m_pieceIndex = g_next.GetNextPiece();
+  }
   m_x = k_defaultPieceSpawnX;
   m_y = k_defaultPieceSpawnY;
   m_orientation = PieceOrientation::North;
@@ -796,6 +820,7 @@ void CurrentPiece::MoveDown(bool isSoftDrop)
 
 void CurrentPiece::DoHardDrop()
 {
+  DebugPrint("HardDrop\n");
   while (TryMove(0, -1))
   {
   }
@@ -864,6 +889,24 @@ bool CurrentPiece::TryRotate(RotationDirection rotationDirection)
   return false;
 }
 
+PieceIndex CurrentPiece::TryHold()
+{
+  PieceIndex oldHoldValue = PieceIndex::Invalid;
+  if (m_holdActionAvailable)
+  {
+    // Disable the hold actio until it gets reset
+    m_holdActionAvailable = false;
+    // Return the hold piece so the caller can respawn it at the top
+    oldHoldValue = m_holdPiece;
+    // Save the current piece in the hold slot
+    m_holdPiece = m_pieceIndex;
+    // Set the current piece to Invalid so it can be respawned
+    m_pieceIndex = PieceIndex::Invalid;
+    DebugPrint("Hold\n");
+  }
+  return oldHoldValue;
+}
+
 void CurrentPiece::LockPieceInGrid()
 {
   // Write all the blocks to the grid
@@ -878,6 +921,9 @@ void CurrentPiece::LockPieceInGrid()
 
   // Invalidate the piece now that it's been written to the grid
   m_pieceIndex = PieceIndex::Invalid;
+  
+  // The hold action gets reset whenever a piece is locked down
+  m_holdActionAvailable = true;
 }
 
 

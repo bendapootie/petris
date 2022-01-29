@@ -8,6 +8,7 @@
 - [x] 7) 5 Next
 - [x] 8) 7-Bucket
 - [ ] 9) Hold
+- [ ] Configure controller so one button can be pause
 - [ ] 10)Piece visuals
 - [ ] 11) Track and display stats
 	- [ ] Lines completed
