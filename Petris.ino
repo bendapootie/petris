@@ -35,6 +35,14 @@ constexpr bool k_debugDisableGravity = false;   // Default: false; 'true' disabl
 
 
 // Gameplay constants
+
+constexpr uint8 k_rotateCwButton = B_BUTTON;
+constexpr uint8 k_rotateCcwButton = A_BUTTON;
+constexpr uint8 k_leftButton = LEFT_BUTTON;
+constexpr uint8 k_rightButton = RIGHT_BUTTON;
+constexpr uint8 k_softDropButton = DOWN_BUTTON;
+constexpr uint8 k_hardDropButton = 0x00;
+
 constexpr uint8 k_frameRate = 60;
 constexpr uint8 k_screenWidth = 128;
 constexpr uint8 k_screenHeight = 64;
@@ -276,7 +284,11 @@ public:
 
   // Minimal code to clear the CurrentPiece. If m_pieceIndex is Invalid, all other data is considered invalid too.
   // Everything else is expected to be initialized in SpawnNewPiece
-  void Reset() { m_pieceIndex = PieceIndex::Invalid; }
+  void Reset()
+  {
+    m_pieceIndex = PieceIndex::Invalid;
+    m_holdPiece = PieceIndex::Invalid;
+  }
 
   // Spawns a new piece at the top of the grid.
   // Returns 'true' if piece spawned without errors
@@ -297,6 +309,7 @@ protected:
   
 private:
   PieceIndex m_pieceIndex;
+  PieceIndex m_holdPiece;
   uint8 m_x;
   uint8 m_y;
   PieceOrientation m_orientation;
@@ -456,13 +469,6 @@ void loop()
     return;
   }
 
-  // Debug keypress to soft-reset the game
-  if (arduboy.pressed(A_BUTTON | B_BUTTON))
-  {
-    Serial.print("RESET\n");
-    ResetGame();
-  }
-  
   switch (g_gameState)
   {
     case GameState::Playing:
@@ -978,8 +984,8 @@ void Controller::ProcessInput()
 {
   // Handle horizontal input and movement
   int8 moveAmount = 0;
-  moveAmount -= ProcessMoveHorizontal(LEFT_BUTTON, m_ticksUntilAutoRepeatLeft);
-  moveAmount += ProcessMoveHorizontal(RIGHT_BUTTON, m_ticksUntilAutoRepeatRight);
+  moveAmount -= ProcessMoveHorizontal(k_leftButton, m_ticksUntilAutoRepeatLeft);
+  moveAmount += ProcessMoveHorizontal(k_rightButton, m_ticksUntilAutoRepeatRight);
   
   int8 moveDelta = (moveAmount < 0) ? -1 : +1;
   while (moveAmount != 0)
@@ -989,14 +995,14 @@ void Controller::ProcessInput()
   }
 
   // Handle rotation input
-  bool cwButtonDown = arduboy.pressed(B_BUTTON);
+  bool cwButtonDown = arduboy.pressed(k_rotateCwButton);
   if (cwButtonDown && !m_cwButtonWasDown)
   {
     g_currentPiece.TryRotate(RotationDirection::Clockwise);
   }
   m_cwButtonWasDown = cwButtonDown;
   
-  bool ccwButtonDown = arduboy.pressed(A_BUTTON);
+  bool ccwButtonDown = arduboy.pressed(k_rotateCcwButton);
   if (ccwButtonDown && !m_ccwButtonWasDown)
   {
     g_currentPiece.TryRotate(RotationDirection::CounterClockwise);
@@ -1004,9 +1010,9 @@ void Controller::ProcessInput()
   m_ccwButtonWasDown = ccwButtonDown;
 
   // Handle drop input
-  m_isSoftDrop = arduboy.pressed(DOWN_BUTTON);
+  m_isSoftDrop = arduboy.pressed(k_softDropButton);
 
-  bool hardDropButtonDown = arduboy.pressed(UP_BUTTON);
+  bool hardDropButtonDown = arduboy.pressed(k_hardDropButton);
   if (hardDropButtonDown && !m_hardDropButtonWasDown)
   {
     g_currentPiece.DoHardDrop();
