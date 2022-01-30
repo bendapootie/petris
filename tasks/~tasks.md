@@ -9,7 +9,6 @@
 - [x] 8) 7-Bucket
 - [x] 9) Hold
 	- [x] Show Hold Piece
-- [ ] Configure controller so one button can be pause
 - [ ] 10)Piece visuals
 - [ ] 11) Track and display stats
 	- [ ] Lines completed
@@ -20,6 +19,8 @@
 - [ ] 14) Score (advanced)
 	- [ ] Full standard Tetris scoring (t-spins, B2B, combos, etc...)
 - [ ] 15) "Fancy" line clear visuals
+- [ ] Configure controller so one button can be pause
+- [ ] Zone - Auto-enter zone when full?
 
 Things to consider
 - Make DAS (Delayed Auto Shift) initial delay and repeat delay scale with game speed

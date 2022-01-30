@@ -1,5 +1,48 @@
 #include <Arduboy2.h>
 
+//==========================================================================
+// Build configuration
+//--------------------------------------------------------------------------
+// Only one of these is allowed to be defined at a time
+//#define CONFIGURATION_TEST
+//#define CONFIGURATION_DEBUG
+#define CONFIGURATION_RELEASE
+
+// TEST - runs unit tests instead of the game
+#if defined CONFIGURATION_TEST
+  #if defined(CONFIGURATION_DEBUG) || defined (CONFIGURATION_RELEASE)
+    #error Multiple configurations were defined! Only one is allowed.
+  #endif
+  #define TEST_BUILD
+  //#define GAME_BUILD
+  #define DEBUGGING_ENABLED
+  
+// DEBUG - runs the game with debug features enabled 
+#elif defined CONFIGURATION_DEBUG
+  #if defined(CONFIGURATION_TEST) || defined (CONFIGURATION_RELEASE)
+    #error Multiple configurations were defined! Only one is allowed.
+  #endif
+  //#define TEST_BUILD
+  #define GAME_BUILD
+  #define DEBUGGING_ENABLED
+  
+// RELEASE - runs the game without any debugging
+#elif defined CONFIGURATION_RELEASE
+  #if defined(CONFIGURATION_TEST) || defined (CONFIGURATION_DEBUG)
+    #error Multiple configurations were defined! Only one is allowed.
+  #endif
+  //#define TEST_BUILD
+  #define GAME_BUILD
+  //#define DEBUGGING_ENABLED   // Debugging is not enabled for release builds
+  
+#else
+  #error No valid build configuration defined!
+#endif
+
+//--------------------------------------------------------------------------
+// Build configuration
+//==========================================================================
+
 // Type aliases
 using uint8 = uint8_t;
 using int8 = int8_t;
@@ -14,15 +57,26 @@ using GameTicks = uint8;
 using BlockIndex = uint8;
 
 
-// Define this symbol to enable Asserts, Serial port output, and extra debugging
-//#define DEBUGGING_ENABLED
-
+// Define DEBUGGING_ENABLED to enable Asserts, Serial port output, and extra debugging
 // Note: If this is defined before the types, I get compiler errors?!?
 #ifdef DEBUGGING_ENABLED
 char g_debugStr[80];
 void DebugPrint(const char* msg) { Serial.print(msg); }
 void DebugPrintLine(const char* msg) { Serial.print(msg); Serial.print("\n"); }
-void Assert(bool condition, const char* msg = "") { if (!condition) {Serial.print("Assert Failed!\n"); Serial.print(msg); Serial.print("\n");} }
+void __AssertFunction(const char* func, int line, bool condition, const char* msg = "")
+{
+  if (!condition)
+  {
+    Serial.print("Assert Failed! ");
+    Serial.print(func);
+    Serial.print("(");
+    Serial.print(line);
+    Serial.print(") - ");
+    Serial.print(msg);
+    Serial.print("\n");
+  }
+}
+#define Assert(condition, ...) __AssertFunction(__FUNCTION__, __LINE__, (condition), ##__VA_ARGS__)
 #else // #ifdef DEBUGGING_ENABLED
 void DebugPrint(...) {}
 void DebugPrintLine(...) {}
@@ -122,6 +176,7 @@ constexpr uint8 countof(const T& a) { return sizeof(a) / sizeof(a[0]); }
 
 enum class GameState : uint8
 {
+  MainMenu,
   Playing,
   GameOver,
 };
@@ -377,6 +432,16 @@ private:
   uint8 m_level;
 };
 
+class Menus
+{
+public:
+  void Reset();
+  void Loop();
+  void ProcessInput();
+private:
+  uint8 m_previousButtonState;
+};
+
 //==========================================================================
 // Global variables
 //--------------------------------------------------------------------------
@@ -387,6 +452,7 @@ class CurrentPiece g_currentPiece;
 class Next g_next;
 class Controller g_controller;
 class GameMode g_gameMode;
+class Menus g_menus;
 
 // "I" Piece Rotations
 const RotationOffsets k_rotationOffsetsI = {{
@@ -484,6 +550,9 @@ void loop()
 
   switch (g_gameState)
   {
+    case GameState::MainMenu:
+      g_menus.Loop();
+    break;
     case GameState::Playing:
       PlayingLoop();
       break;
@@ -502,11 +571,35 @@ void ResetGame()
   g_grid.Clear();
   g_gameMode.Reset();
   // TODO: This should be incorporated into GameMode
-  g_gameState = GameState::Playing;
+  g_gameState = GameState::MainMenu;
 
   g_next.Reset();
   g_currentPiece.Reset();
   g_controller.Reset();
+
+  g_menus.Reset();
+}
+
+void Menus::Reset()
+{
+  m_previousButtonState = 0x00;
+}
+
+void Menus::Loop()
+{
+  Serial.print(B_BUTTON);
+  Serial.print(" - B\n");
+  Serial.print(LEFT_BUTTON);
+  Serial.print(" - Left\n");
+
+
+  ProcessInput();
+  g_gameState = GameState::Playing;
+}
+
+void Menus::ProcessInput()
+{
+  
 }
 
 void PlayingLoop()
