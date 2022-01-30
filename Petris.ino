@@ -92,6 +92,13 @@ constexpr uint8 k_gridLeftPos = (k_screenWidth / 2) - (k_playspaceWidth / 2);
 constexpr uint8 k_numNextPiecesToShow = 5;
 static_assert(k_numNextPiecesToShow <= 5, "Current implementation of 7-bag piece randomization doesn't support looking ahead more than 5 pieces");
 
+// These positions aren't cleanly defined procedurally. The "magic numbers" don't accurately describe why they're needed.
+// Maybe these coordinates should just be straight screen-space coordinates?
+constexpr uint8 k_nextDisplayLeftPos = k_gridLeftPos + k_playspaceWidth + (2 * k_blockWidth);
+constexpr uint8 k_nextDisplayBottomPos = ((2 + k_numNextPiecesToShow) * 3) * k_blockHeight;
+constexpr uint8 k_holdDisplayLeft = k_gridLeftPos - (6 * k_blockWidth);
+constexpr uint8 k_holdDisplayBottom = 3 * k_blockHeight;
+
 // Type-safe enum for tracking Tetrimino indices
 // Note: There are 7 options, so even with an extra entry for "None", this could be stored in 3-bits
 enum class PieceIndex : uint8
@@ -266,7 +273,7 @@ public:
   // Returns the RotationOffsets data associated with this PieceData. It will be null if there aren't alternate rotations for the piece.
   const RotationOffsets* GetRotationOffsets() const { return m_rotationOffsets; }
 
-  void Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex) const;
+  void Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const;
   
 private:
   // Data that describes alternative rotation offsets for the piece.
@@ -556,10 +563,10 @@ void GameOverLoop()
   }
 }
 
-static void DrawBlock(uint8 x, uint8 y, BlockIndex block)
+static void DrawBlock(uint8 x, uint8 y, BlockIndex block, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos)
 {
-  const uint8 left = k_gridLeftPos + (x * k_blockWidth);
-  const uint8 top = k_gridBottomPos - (y * k_blockHeight);
+  const uint8 left = leftAnchorScreenPos + (x * k_blockWidth);
+  const uint8 top = bottomAnchorScreenPos - (y * k_blockHeight);
   if (block == 0)
   {
     arduboy.fillRect(left, top, k_blockWidth, k_blockHeight, BLACK);
@@ -608,7 +615,7 @@ void Grid::Draw() const
   {
     for (uint8 x = 0; x < k_gridWidth; x++)
     {
-      DrawBlock(x, y, Get(x, y));
+      DrawBlock(x, y, Get(x, y), k_gridLeftPos, k_gridBottomPos);
     }
   }
 }
@@ -706,17 +713,16 @@ void PieceData::GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientat
   }
 }
 
-void PieceData::Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex) const
+void PieceData::Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const
 {
   uint8 dx;
   uint8 dy;
   for (uint8 i = 0; i < GetNumBlocksInPiece(); i++)
   {
     GetBlockOffsetForIndexAndRotation(i, orientation, dx, dy);
-    DrawBlock(x + dx, y + dy, blockIndex);
+    DrawBlock(x + dx, y + dy, blockIndex, leftAnchorScreenPos, bottomAnchorScreenPos);
   }
 }
-
 
 const PieceData& CurrentPiece::GetPieceData() const
 {
@@ -756,7 +762,7 @@ void CurrentPiece::Draw() const
   if (m_pieceIndex != PieceIndex::Invalid)
   {
     const BlockIndex blockIndex = 1;
-    GetPieceData().Draw(m_x, m_y, m_orientation, blockIndex);
+    GetPieceData().Draw(m_x, m_y, m_orientation, blockIndex, k_gridLeftPos, k_gridBottomPos);
   }
 }
 
@@ -774,7 +780,7 @@ void CurrentPiece::DrawShadow() const
     if (shadowY != m_y)
     {
       const BlockIndex shadowBlockIndex = 2;
-      pieceData.Draw(m_x, shadowY, m_orientation, shadowBlockIndex);
+      pieceData.Draw(m_x, shadowY, m_orientation, shadowBlockIndex, k_gridLeftPos, k_gridBottomPos);
     }
   }
 }
@@ -891,20 +897,32 @@ bool CurrentPiece::TryRotate(RotationDirection rotationDirection)
 
 PieceIndex CurrentPiece::TryHold()
 {
-  PieceIndex oldHoldValue = PieceIndex::Invalid;
+  PieceIndex oldHoldPiece = PieceIndex::Invalid;
   if (m_holdActionAvailable)
   {
     // Disable the hold actio until it gets reset
     m_holdActionAvailable = false;
     // Return the hold piece so the caller can respawn it at the top
-    oldHoldValue = m_holdPiece;
+    oldHoldPiece = m_holdPiece;
     // Save the current piece in the hold slot
     m_holdPiece = m_pieceIndex;
     // Set the current piece to Invalid so it can be respawned
     m_pieceIndex = PieceIndex::Invalid;
+
+    // Update the Hold display
+    // NOTE: This only works if this code block is the only place m_holdPiece is modified during gameplay
+    if (oldHoldPiece != PieceIndex::Invalid)
+    {
+      const BlockIndex clearBlock = 0;
+      g_pieceData[uint8(oldHoldPiece)].Draw(0, 0, PieceOrientation::North, clearBlock, k_holdDisplayLeft, k_holdDisplayBottom);
+    }
+    Assert(m_holdPiece != PieceIndex::Invalid);
+    const BlockIndex nextBlock = 1;
+    g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, nextBlock, k_holdDisplayLeft, k_holdDisplayBottom);
+    
     DebugPrint("Hold\n");
   }
-  return oldHoldValue;
+  return oldHoldPiece;
 }
 
 void CurrentPiece::LockPieceInGrid()
@@ -965,7 +983,7 @@ void Next::Draw(BlockIndex blockIndex) const
     const PieceData& pieceData = g_pieceData[uint8(m_next[m_index + i])];
     // TODO: What block index should be used for the Next display?
     // TODO: Formalize the position of these draws
-    pieceData.Draw(12, 18 - (i * 3), PieceOrientation::North, blockIndex);
+    pieceData.Draw(0, (1 + k_numNextPiecesToShow - i) * 3, PieceOrientation::North, blockIndex, k_nextDisplayLeftPos, k_nextDisplayBottomPos);
   }
 }
 

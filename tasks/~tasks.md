@@ -7,7 +7,8 @@
 - [x] 6) Next
 - [x] 7) 5 Next
 - [x] 8) 7-Bucket
-- [ ] 9) Hold
+- [x] 9) Hold
+	- [x] Show Hold Piece
 - [ ] Configure controller so one button can be pause
 - [ ] 10)Piece visuals
 - [ ] 11) Track and display stats
