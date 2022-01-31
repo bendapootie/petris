@@ -153,6 +153,8 @@ constexpr uint8 k_nextDisplayBottomPos = ((2 + k_numNextPiecesToShow) * 3) * k_b
 constexpr uint8 k_holdDisplayLeft = k_gridLeftPos - (6 * k_blockWidth);
 constexpr uint8 k_holdDisplayBottom = 3 * k_blockHeight;
 
+constexpr uint8 k_maxStartingLevel = 19;
+
 // Type-safe enum for tracking Tetrimino indices
 // Note: There are 7 options, so even with an extra entry for "None", this could be stored in 3-bits
 enum class PieceIndex : uint8
@@ -427,6 +429,7 @@ public:
   GameTicks GetFallTime() const;
 
   void Reset() { m_level = 0; }
+  void SetLevel(uint8 level) { m_level = level; }
   void NextLevel() { m_level++; }
 private:
   uint8 m_level;
@@ -435,12 +438,32 @@ private:
 class Menus
 {
 public:
-  void Reset();
+  void Reset()
+  {
+    m_previousButtonDownFlags = 0x00;
+    m_previousButtonDownFlags = 0x00;
+    m_selectedIndex = 0;
+    m_startingLevel = 0;
+  }
+
   void Loop();
   void ProcessInput();
+
+  bool WasButtonPressed(uint8 buttons) { return (buttons & m_currentButtonDownFlags & ~m_previousButtonDownFlags) == buttons; }
+  bool WasButtonHeld(uint8 buttons) { return (buttons & m_currentButtonDownFlags & m_previousButtonDownFlags) == buttons; }
+  bool WasButtonReleased(uint8 buttons) { return (buttons & ~m_currentButtonDownFlags & m_previousButtonDownFlags) == buttons; }
+  
 private:
-  uint8 m_previousButtonState;
+  uint8 m_currentButtonDownFlags;
+  uint8 m_previousButtonDownFlags;
+
+  uint8 m_selectedIndex;
+  uint8 m_startingLevel;
 };
+
+// TODO: Move this out of dynamic memory
+const char* k_menuItems[] = {"Play", "Mode", "Level", "Skin", "Shadow"};
+
 
 //==========================================================================
 // Global variables
@@ -580,26 +603,87 @@ void ResetGame()
   g_menus.Reset();
 }
 
-void Menus::Reset()
-{
-  m_previousButtonState = 0x00;
-}
-
 void Menus::Loop()
 {
-  Serial.print(B_BUTTON);
-  Serial.print(" - B\n");
-  Serial.print(LEFT_BUTTON);
-  Serial.print(" - Left\n");
-
-
   ProcessInput();
-  g_gameState = GameState::Playing;
+
+  switch (m_selectedIndex)
+  {
+    case 0: // "Play"
+      if (WasButtonPressed(A_BUTTON) | WasButtonPressed(B_BUTTON))
+      {
+        // TODO: Clean this up! There needs to be a better way to manage this state
+        // Dirty workaround since m_startingLevel gets cleared in ResetGame()
+        uint8 startingLevel = m_startingLevel;
+        ResetGame();
+        g_gameMode.SetLevel(startingLevel);
+        g_gameState = GameState::Playing;
+      }
+      break;
+    case 1: // "Mode"
+      break;
+    case 2: // "Level"
+      if ((m_startingLevel < k_maxStartingLevel) && (WasButtonPressed(B_BUTTON) || WasButtonPressed(RIGHT_BUTTON)))
+      {
+        m_startingLevel++;
+      }
+      if ((m_startingLevel > 0) && (WasButtonPressed(A_BUTTON) || WasButtonPressed(LEFT_BUTTON)))
+      {
+        m_startingLevel--;
+      }
+      break;
+    case 3: // "Skin"
+      break;
+    case 4: // "Shadow"
+      break;
+  }
+
+  arduboy.clear();
+  // TODO: Clean this up. State transitions should be cleaner and not have to rely on hacks like this to clear the screen
+  // Early-out if we're not in the main menu game state anymore.
+  if (g_gameState != GameState::MainMenu)
+  {
+    return;
+  }
+  
+  for (uint8 i = 0; i < countof(k_menuItems); i++)
+  {
+    arduboy.print(m_selectedIndex == i ? "> " : "   ");
+    arduboy.print(k_menuItems[i]);
+    switch (i)
+    {
+      case 2:
+        arduboy.print(" [");
+        arduboy.print(m_startingLevel);
+        arduboy.print("]");
+        break;
+    }
+    arduboy.println();
+  }
 }
 
 void Menus::ProcessInput()
 {
+  m_previousButtonDownFlags = m_currentButtonDownFlags;
+  m_currentButtonDownFlags = 0x00;
+  for (uint8 i = 0; i < 8; i++)
+  {
+    uint8 buttonFlag = 1 << i;
+    if (arduboy.pressed(buttonFlag))
+    {
+      m_currentButtonDownFlags |= buttonFlag;
+    }
+  }
   
+  if (WasButtonPressed(UP_BUTTON))
+  {
+    m_selectedIndex += countof(k_menuItems) - 1;
+  }
+  if (WasButtonPressed(DOWN_BUTTON))
+  {
+    m_selectedIndex++;
+  }
+  m_selectedIndex = m_selectedIndex % countof(k_menuItems);
 }
 
 void PlayingLoop()
