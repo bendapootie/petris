@@ -1,3 +1,4 @@
+- [ ] Make Next only use 11 bytes instead of 14 for tracking 7-bags
 - [ ] Move appropriate data into PROGMEM ([documentation link](https://www.arduino.cc/reference/en/language/variables/utilities/progmem/)) to free up dynamic memory
 	- [ ] Use `F()` Macro for all inline strings
 - [ ] Initialization of `RotationOffsets` seems to take a fair amount of code. Global variable usage seems as expected.

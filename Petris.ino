@@ -390,6 +390,12 @@ private:
 class Next
 {
 public:
+#ifdef TEST_BUILD
+  static void UnitTest();
+  // Prints the current state of the next queue
+  void DebugPrint() const;
+#endif // #ifdef TEST_BUILD
+  
   void Reset();
   PieceIndex GetNextPiece();
   void Draw(BlockIndex blockIndex) const;
@@ -397,7 +403,7 @@ public:
 private:
   void ShuffleBag(uint8 startingIndex);
 private:
-  PieceIndex m_next[11];
+  PieceIndex m_next[14];
   uint8 m_index;
 };
 
@@ -552,6 +558,11 @@ static_assert(countof(g_pieceData) == uint8(PieceIndex::Count));
 // Global variables
 //==========================================================================
 
+//==========================================================================
+// Entry points for GAME_BUILD
+//--------------------------------------------------------------------------
+#ifdef GAME_BUILD
+
 void setup()
 {
 #ifdef DEBUGGING_ENABLED
@@ -586,6 +597,92 @@ void loop()
 
   arduboy.display();
 }
+
+#endif // #ifdef GAME_BUILD
+//--------------------------------------------------------------------------
+// Entry points for GAME_BUILD
+//==========================================================================
+
+//==========================================================================
+// Entry points for TEST_BUILD
+//--------------------------------------------------------------------------
+#ifdef TEST_BUILD
+
+#define RunTest(test) __RunTestHelper(F(#test), test)
+// Forward declare testing function
+void __RunTestHelper(void(*testFunction)());
+
+// Global test counters
+int g_testPassCount;
+int g_testFailCount;
+
+#define TestVerify(condition) { if(condition){g_testPassCount++;}else{g_testFailCount++;Serial.print(F("Test Failed("));Serial.print(__LINE__);Serial.print(F("): "));Serial.println(F(#condition));}}
+
+void setup()
+{
+#ifdef DEBUGGING_ENABLED
+  Serial.begin(9600);
+  while(!Serial); // wait for serial port to connect. Needed for native USB
+#endif // #ifdef DEBUGGING_ENABLED
+  arduboy.begin();
+  arduboy.setFrameRate(k_frameRate);
+}
+
+void loop()
+{
+  // pause render until it's time for the next frame
+  if (!(arduboy.nextFrame()))
+  {
+    return;
+  }
+
+  static uint8 s_frameNum = 0;
+  switch(s_frameNum)
+  {
+    case 0: arduboy.clear(); break;
+    case 1: RunTest(Next::UnitTest); break;
+    case 2: RunTest(TestFailure); break;
+    case 3: break;
+  }
+  if (s_frameNum < 255) { s_frameNum++; }
+  
+  arduboy.display();
+}
+
+void TestFailure()
+{
+  TestVerify(1 + 1 == 2);
+  TestVerify(uint8(uint8(255) + uint8(1)) == 0);
+  TestVerify(1 + 7 == 93);  // Fail
+  TestVerify(2 * 2 == 4);
+}
+
+void __RunTestHelper(const __FlashStringHelper* testName, void(*testFunction)())
+{
+  g_testPassCount = 0;
+  g_testFailCount = 0;
+  (*testFunction)();
+  if (g_testFailCount == 0)
+  {
+    arduboy.setTextColor(WHITE);
+    arduboy.setTextBackground(BLACK);
+  }
+  else
+  {
+    arduboy.setTextColor(BLACK);
+    arduboy.setTextBackground(WHITE);
+  }
+  arduboy.print(testName);
+  arduboy.print(F(": "));
+  arduboy.print(g_testPassCount);
+  arduboy.print(F("/"));
+  arduboy.println(g_testPassCount + g_testFailCount);
+}
+
+#endif // #ifdef TEST_BUILD
+//--------------------------------------------------------------------------
+// Entry points for TEST_BUILD
+//==========================================================================
 
 void ResetGame()
 {
@@ -1119,12 +1216,80 @@ void CurrentPiece::LockPieceInGrid()
   m_holdActionAvailable = true;
 }
 
+//==========================================================================
+// Unit tests for - Next class
+//--------------------------------------------------------------------------
+#ifdef TEST_BUILD
+void Next::UnitTest()
+{
+  Next test;
+  memset(&test, 0x00, sizeof(test));
+  TestVerify(test.m_next[0] == PieceIndex(0));
+
+  // Verify initial shuffle contains one of each piece
+  test.Reset();
+  for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
+  {
+    PieceIndex piece = PieceIndex(i);
+    bool pieceFound = false;
+    for (uint8 j = 0; j < uint8(PieceIndex::Count); j++)
+    {
+      if (test.m_next[j] == piece)
+      {
+        pieceFound = true;
+      }
+    }
+    TestVerify(pieceFound);
+  }
+
+  uint8 pieceCounts[uint8(PieceIndex::Count)] = {0};
+  const uint8 bagIterations = 50;
+  for (uint8 iterations = 0; iterations < bagIterations; iterations++)
+  {
+    for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
+    {
+      test.DebugPrint();
+      pieceCounts[uint8(test.GetNextPiece())]++;
+    }
+  
+    // Make sure all pieces were chosen the same number of times
+    bool allChosen = true;
+    for (uint8 i = 0; i < countof(pieceCounts); i++)
+    {
+      TestVerify(pieceCounts[i] == iterations + 1);
+    }
+  }
+}
+
+void Next::DebugPrint() const
+{
+  const char* k_pieces[] = {"O", "I", "T", "L", "J", "S", "Z"};
+  for (uint8 i = 0; i < countof(m_next); i++)
+  {
+    if (i == m_index)
+    {
+      Serial.print(F("["));
+    }
+    Serial.print(k_pieces[uint8(m_next[i])]);
+    if (i == m_index)
+    {
+      Serial.print(F("]"));
+    }
+  }
+  Serial.println();
+}
+#endif // #ifdef TEST_BUILD
+//--------------------------------------------------------------------------
+// Unit tests for - Next class
+//==========================================================================
 
 void Next::Reset()
 {
   // TODO: Randomize things better. Maybe take into acount player input?
   arduboy.initRandomSeed();
+  // Initialize two bags
   ShuffleBag(0);
+  ShuffleBag(7);
   m_index = 0;
 }
 
@@ -1137,17 +1302,19 @@ PieceIndex Next::GetNextPiece()
   m_index++;
   // TODO: Make this magic number a constant or computed?
   // If the index has progressed this far, another bag needs to be randomized
-  if (m_index >= 3)
+  if (m_index >= 7)
   {
+    Assert(m_index == 7);
     // This is likely less code than a loop to copy, or to treat the whole think like a ring buffer
-    m_next[0] = m_next[3];
-    m_next[1] = m_next[4];
-    m_next[2] = m_next[5];
-    m_next[3] = m_next[6];
-    ShuffleBag(4);
+    memmove(m_next, m_next + m_index, (countof(m_next) * sizeof(*m_next)) - m_index);
+    ShuffleBag(7);
     m_index = 0;
   }
+#ifdef GAME_BUILD
+  // Update the Next display in game builds
+  // TODO: Figure out a nicer way to do this and not have drawing code in the middle of GetNextPiece
   Draw(1);
+#endif // #ifdef GAME_BUILD
   return nextPiece;
 }
 
@@ -1164,7 +1331,7 @@ void Next::Draw(BlockIndex blockIndex) const
 
 void Next::ShuffleBag(uint8 startingIndex)
 {
-  Assert(startingIndex < countof(m_next) - uint8(PieceIndex::Count));
+  Assert(startingIndex <= countof(m_next) - uint8(PieceIndex::Count));
   // Put one of each piece in the "bag"
   for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
   {
@@ -1180,7 +1347,6 @@ void Next::ShuffleBag(uint8 startingIndex)
     m_next[swapIndex + startingIndex] = temp;
   }
 }
-
 
 // button: The input button to query (ie. LEFT_BUTTON, or RIGHT_BUTTON
 // moveDirection: Expected to be -1 if input moves piece left and +1 if input moves piece right
