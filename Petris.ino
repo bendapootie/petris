@@ -61,19 +61,18 @@ using BlockIndex = uint8;
 // Note: If this is defined before the types, I get compiler errors?!?
 #ifdef DEBUGGING_ENABLED
 char g_debugStr[80];
-void DebugPrint(const char* msg) { Serial.print(msg); }
-void DebugPrintLine(const char* msg) { Serial.print(msg); Serial.print("\n"); }
-void __AssertFunction(const char* func, int line, bool condition, const char* msg = "")
+void DebugPrint(const __FlashStringHelper* msg) { Serial.print(msg); }
+void DebugPrintLine(const __FlashStringHelper* msg) { Serial.println(msg); }
+void __AssertFunction(const char* func, int line, bool condition, const __FlashStringHelper* msg = nullptr)
 {
   if (!condition)
   {
-    Serial.print("Assert Failed! ");
+    Serial.print(F("Assert Failed! "));
     Serial.print(func);
-    Serial.print("(");
+    Serial.print(F("("));
     Serial.print(line);
-    Serial.print(") - ");
-    Serial.print(msg);
-    Serial.print("\n");
+    Serial.print(F(") - "));
+    Serial.println(msg);
   }
 }
 #define Assert(condition, ...) __AssertFunction(__FUNCTION__, __LINE__, (condition), ##__VA_ARGS__)
@@ -648,14 +647,14 @@ void Menus::Loop()
   
   for (uint8 i = 0; i < countof(k_menuItems); i++)
   {
-    arduboy.print(m_selectedIndex == i ? "> " : "   ");
+    arduboy.print(m_selectedIndex == i ? F("> ") : F("   "));
     arduboy.print(k_menuItems[i]);
     switch (i)
     {
       case 2:
-        arduboy.print(" [");
+        arduboy.print(F(" ["));
         arduboy.print(m_startingLevel);
-        arduboy.print("]");
+        arduboy.print(F("]"));
         break;
     }
     arduboy.println();
@@ -732,7 +731,7 @@ void GameOverLoop()
   arduboy.setTextColor(WHITE);
   arduboy.setCursorX((k_screenWidth - (9 * 5)) / 2);
   arduboy.setCursorY((k_screenHeight - 7) / 2);
-  arduboy.print("Game Over");
+  arduboy.print(F("Game Over"));
 
   if (arduboy.pressed(A_BUTTON) | arduboy.pressed(B_BUTTON))
   {
@@ -766,17 +765,16 @@ static void DrawBlock(uint8 x, uint8 y, BlockIndex block, uint8 leftAnchorScreen
 void Grid::DebugPrint(const char* msg) const
 {
   Serial.print(__FUNCTION__);
-  Serial.print(msg);
-  Serial.print("\n");
+  Serial.println(msg);
   for (uint8 y = 0; y < k_gridHeight; y++)
   {
     for (uint8 x = 0; x < k_gridWidth; x++)
     {
       Serial.print(Get(x, y));
     }
-    Serial.print("\n");
+    Serial.println();
   }
-  Serial.print("\n");
+  Serial.println();
 }
 #endif // #ifdef DEBUGGING_ENABLED
 
@@ -857,7 +855,7 @@ void PieceData::GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientat
     do
     {
       bitIndex++;
-      Assert(bitIndex < 8, "m_defaultBlockPositions and/or blockIndex were bad");
+      Assert(bitIndex < 8, F("m_defaultBlockPositions and/or blockIndex were bad"));
     } while ((m_defaultBlockPositions & (uint8(0x01) << bitIndex)) == 0);
     blockIndex--;
   } while (blockIndex >= 0);
@@ -912,7 +910,7 @@ bool CurrentPiece::SpawnNewPiece(PieceIndex knownNextPiece)
   {
     // Assume this came from the hold piece, so the hold action doesn't get reset
     m_pieceIndex = knownNextPiece;
-    DebugPrint("NextPieceFromHold");
+    DebugPrint(F("NextPieceFromHold"));
   }
   else
   {
@@ -926,8 +924,7 @@ bool CurrentPiece::SpawnNewPiece(PieceIndex knownNextPiece)
 
 #ifdef DEBUGGING_ENABLED
   const char* k_pieces[] = {"O", "I", "T", "L", "J", "S", "Z"};
-  Serial.print(k_pieces[uint8(m_pieceIndex)]);
-  Serial.print("\n");
+  Serial.println(k_pieces[uint8(m_pieceIndex)]);
 #endif // #ifdef DEBUGGING_ENABLED
   
   // Check if new piece overlaps with anything on the board
@@ -1003,7 +1000,7 @@ void CurrentPiece::MoveDown(bool isSoftDrop)
 
 void CurrentPiece::DoHardDrop()
 {
-  DebugPrint("HardDrop\n");
+  DebugPrintLine(F("HardDrop"));
   while (TryMove(0, -1))
   {
   }
@@ -1048,13 +1045,13 @@ bool CurrentPiece::TryRotate(RotationDirection rotationDirection)
         int(m_pieceIndex),
         int(m_x),
         int(m_y),
-        m_orientation == PieceOrientation::North ? "N" : (m_orientation == PieceOrientation::East ? "E" : (m_orientation == PieceOrientation::South ? "S" : "W")),
-        (rotationDirection == RotationDirection::Clockwise) ? "cw" : "ccw",
+        m_orientation == PieceOrientation::North ? ("N") : (m_orientation == PieceOrientation::East ? ("E") : (m_orientation == PieceOrientation::South ? ("S") : ("W"))),
+        (rotationDirection == RotationDirection::Clockwise) ? ("cw") : ("ccw"),
         int(rotationIndex),
         int(deltaX),
         int(deltaY)
       );
-      DebugPrint(g_debugStr);
+      Serial.print(g_debugStr);
 #endif // #ifdef DEBUGGING_ENABLED
     }
     
@@ -1097,7 +1094,7 @@ PieceIndex CurrentPiece::TryHold()
     const BlockIndex nextBlock = 1;
     g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, nextBlock, k_holdDisplayLeft, k_holdDisplayBottom);
     
-    DebugPrint("Hold\n");
+    DebugPrintLine(F("Hold"));
   }
   return oldHoldPiece;
 }
@@ -1269,11 +1266,11 @@ uint8 GameMode::GetFallTime() const
   // Level 1 = 240 Ticks/Line = 1 Second/Line
   // Level 2 = 190 Ticks/Line = 0.793 Seconds/Line, etc...
   // See off-line calculations here - https://docs.google.com/spreadsheets/d/1j6nqMDazV5cpRodXMpWqeaF-EM9KFNCSMc6DYBvs_V8/edit#gid=0
-  constexpr uint8 k_fallSpeeds[] = {
+  static constexpr PROGMEM uint8 k_fallSpeeds[] = {
     240, 190, 148, 113, 85, 63, 46, 32, 23, 15, 10, 7, 4, 3, 2, 1, 1, 0
   };
   constexpr uint8 k_numFallSpeeds = countof(k_fallSpeeds) - 1;
-  
+
   // If m_level is bigger than the above array supports, clamp to the last (fastest) value
-  return k_fallSpeeds[Min(m_level, k_numFallSpeeds)];
+  return pgm_read_byte_near(k_fallSpeeds + Min(m_level, k_numFallSpeeds));
 }

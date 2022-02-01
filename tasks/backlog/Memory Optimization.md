@@ -1,4 +1,5 @@
 - [ ] Move appropriate data into PROGMEM ([documentation link](https://www.arduino.cc/reference/en/language/variables/utilities/progmem/)) to free up dynamic memory
+	- [ ] Use `F()` Macro for all inline strings
 - [ ] Initialization of `RotationOffsets` seems to take a fair amount of code. Global variable usage seems as expected.
 	- [ ] Data for RotationOffsets takes 32-bytes per piece.
 		- More efficient encoding could reduce total memory usage from 192 bytes (32 bytes * 6 pieces) to 120 bytes (20 bytes * 6 pieces)
