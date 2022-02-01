@@ -556,6 +556,7 @@ void setup()
 {
 #ifdef DEBUGGING_ENABLED
   Serial.begin(9600);
+  while(!Serial); // wait for serial port to connect. Needed for native USB
 #endif // #ifdef DEBUGGING_ENABLED
   arduboy.begin();
   arduboy.setFrameRate(k_frameRate);
@@ -1270,7 +1271,7 @@ uint8 GameMode::GetFallTime() const
     240, 190, 148, 113, 85, 63, 46, 32, 23, 15, 10, 7, 4, 3, 2, 1, 1, 0
   };
   constexpr uint8 k_numFallSpeeds = countof(k_fallSpeeds) - 1;
-
+  
   // If m_level is bigger than the above array supports, clamp to the last (fastest) value
   return pgm_read_byte_near(k_fallSpeeds + Min(m_level, k_numFallSpeeds));
 }
