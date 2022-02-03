@@ -445,8 +445,6 @@ class Menus
 public:
   void Reset()
   {
-    m_previousButtonDownFlags = 0x00;
-    m_previousButtonDownFlags = 0x00;
     m_selectedIndex = 0;
     m_startingLevel = 0;
   }
@@ -454,16 +452,43 @@ public:
   void Loop();
   void ProcessInput();
 
-  bool WasButtonPressed(uint8 buttons) { return (buttons & m_currentButtonDownFlags & ~m_previousButtonDownFlags) == buttons; }
-  bool WasButtonHeld(uint8 buttons) { return (buttons & m_currentButtonDownFlags & m_previousButtonDownFlags) == buttons; }
-  bool WasButtonReleased(uint8 buttons) { return (buttons & ~m_currentButtonDownFlags & m_previousButtonDownFlags) == buttons; }
-  
 private:
-  uint8 m_currentButtonDownFlags;
-  uint8 m_previousButtonDownFlags;
-
   uint8 m_selectedIndex;
   uint8 m_startingLevel;
+};
+
+class Input
+{
+public:
+  void Update();
+  // Returns true if the current state of the button is down, ignoring any history
+  bool IsButtonDown(uint8 button) const { return (button & m_currentButtonDownFlags); }
+  // Returns true if the button is down now, but wasn't last frame
+  bool IsButtonPressed(uint8 button) const { return (button & m_currentButtonDownFlags & ~m_previousButtonDownFlags); }
+  // Returns true if the button is down this frame and was also down last frame
+  bool IsButtonHeld(uint8 button) const { return (button & m_currentButtonDownFlags & m_previousButtonDownFlags); }
+  // Returns true if the button is up this frame, but was down last frame
+  bool IsButtonReleased(uint8 button) const { return (button & ~m_currentButtonDownFlags & m_previousButtonDownFlags); }
+
+private:
+  static bool SampleRawInput(uint8 buttons);
+
+private:
+  uint8 m_currentButtonDownFlags = 0;
+  uint8 m_previousButtonDownFlags = 0;
+};
+
+// The global object that contains and manages all other objects
+// At the time of writing, not everything is contained within Global, but things are moving that way
+class Global
+{
+public:
+  static bool SampleRawInput(uint8 buttons);
+
+  void Loop();
+  const Input& GetInput() const { return m_input; }
+private:
+  Input m_input;
 };
 
 // TODO: Move this out of dynamic memory
@@ -474,6 +499,8 @@ const char* k_menuItems[] = {"Play", "Mode", "Level", "Skin", "Shadow"};
 // Global variables
 //--------------------------------------------------------------------------
 class Arduboy2 arduboy;
+Global g;
+
 GameState g_gameState;
 class Grid g_grid;
 class CurrentPiece g_currentPiece;
@@ -582,18 +609,7 @@ void loop()
     return;
   }
 
-  switch (g_gameState)
-  {
-    case GameState::MainMenu:
-      g_menus.Loop();
-    break;
-    case GameState::Playing:
-      PlayingLoop();
-      break;
-    case GameState::GameOver:
-      GameOverLoop();
-      break;
-  }
+  g.Loop();
 
   arduboy.display();
 }
@@ -684,6 +700,45 @@ void __RunTestHelper(const __FlashStringHelper* testName, void(*testFunction)())
 // Entry points for TEST_BUILD
 //==========================================================================
 
+void Global::Loop()
+{
+  m_input.Update();
+  
+  switch (g_gameState)
+  {
+    case GameState::MainMenu:
+      g_menus.Loop();
+    break;
+    case GameState::Playing:
+      PlayingLoop();
+      break;
+    case GameState::GameOver:
+      GameOverLoop();
+      break;
+  }
+}
+
+
+void Input::Update()
+{
+  m_previousButtonDownFlags = m_currentButtonDownFlags;
+  m_currentButtonDownFlags = 0x00;
+  for (uint8 i = 0; i < 8; i++)
+  {
+    uint8 buttonFlag = 1 << i;
+    if (SampleRawInput(buttonFlag))
+    {
+      m_currentButtonDownFlags |= buttonFlag;
+    }
+  }
+}
+
+// static
+bool Input::SampleRawInput(uint8 buttons)
+{
+  return arduboy.pressed(buttons);
+}
+
 void ResetGame()
 {
   arduboy.clear();
@@ -704,10 +759,11 @@ void Menus::Loop()
 {
   ProcessInput();
 
+  const Input& input = g.GetInput();
   switch (m_selectedIndex)
   {
     case 0: // "Play"
-      if (WasButtonPressed(A_BUTTON) | WasButtonPressed(B_BUTTON))
+      if (input.IsButtonPressed(A_BUTTON) | input.IsButtonPressed(B_BUTTON))
       {
         // TODO: Clean this up! There needs to be a better way to manage this state
         // Dirty workaround since m_startingLevel gets cleared in ResetGame()
@@ -720,11 +776,11 @@ void Menus::Loop()
     case 1: // "Mode"
       break;
     case 2: // "Level"
-      if ((m_startingLevel < k_maxStartingLevel) && (WasButtonPressed(B_BUTTON) || WasButtonPressed(RIGHT_BUTTON)))
+      if ((m_startingLevel < k_maxStartingLevel) && (input.IsButtonPressed(B_BUTTON) || input.IsButtonPressed(RIGHT_BUTTON)))
       {
         m_startingLevel++;
       }
-      if ((m_startingLevel > 0) && (WasButtonPressed(A_BUTTON) || WasButtonPressed(LEFT_BUTTON)))
+      if ((m_startingLevel > 0) && (input.IsButtonPressed(A_BUTTON) || input.IsButtonPressed(LEFT_BUTTON)))
       {
         m_startingLevel--;
       }
@@ -761,22 +817,12 @@ void Menus::Loop()
 
 void Menus::ProcessInput()
 {
-  m_previousButtonDownFlags = m_currentButtonDownFlags;
-  m_currentButtonDownFlags = 0x00;
-  for (uint8 i = 0; i < 8; i++)
-  {
-    uint8 buttonFlag = 1 << i;
-    if (arduboy.pressed(buttonFlag))
-    {
-      m_currentButtonDownFlags |= buttonFlag;
-    }
-  }
-  
-  if (WasButtonPressed(UP_BUTTON))
+  const Input& input = g.GetInput();
+  if (input.IsButtonPressed(UP_BUTTON))
   {
     m_selectedIndex += countof(k_menuItems) - 1;
   }
-  if (WasButtonPressed(DOWN_BUTTON))
+  if (input.IsButtonPressed(DOWN_BUTTON))
   {
     m_selectedIndex++;
   }
@@ -789,7 +835,7 @@ void PlayingLoop()
 
   // "Hold" piece support
   PieceIndex knownNextPiece = PieceIndex::Invalid;
-  if (arduboy.pressed(k_holdButton))
+  if (g.GetInput().IsButtonHeld(k_holdButton)) // 11520
   {
     // Hold is allowed to be used once per drop. It won't do anything if it's already been used.
     knownNextPiece = g_currentPiece.TryHold();
@@ -831,7 +877,7 @@ void GameOverLoop()
   arduboy.setCursorY((k_screenHeight - 7) / 2);
   arduboy.print(F("Game Over"));
 
-  if (arduboy.pressed(A_BUTTON) | arduboy.pressed(B_BUTTON))
+  if (g.GetInput().IsButtonReleased(A_BUTTON) || g.GetInput().IsButtonReleased(B_BUTTON))
   {
     ResetGame();
   }

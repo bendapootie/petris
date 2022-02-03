@@ -9,3 +9,4 @@
 - [ ] `RotationFormula` has only two values and could be represented with one bit.
 - [ ] Make m_cwButtonWasDown and m_ccwButtonWasDown only take 1-bit
 	- [ ] Look at anything that's a boolean and consider adding ` 1` to the end (ie. `bool isSet : 1;`)
+- [ ] Replace custom input code with calls to `arduboy.justPressed / justReleased`
