@@ -94,7 +94,8 @@ constexpr uint8 k_rotateCcwButton = A_BUTTON;
 constexpr uint8 k_leftButton = LEFT_BUTTON;
 constexpr uint8 k_rightButton = RIGHT_BUTTON;
 constexpr uint8 k_softDropButton = DOWN_BUTTON;
-constexpr uint8 k_hardDropButton = 0xFF;  // There's not a good button for hard drop. I'd prefer to have "hold" than hard drop
+// Note: An unassigned button using the Input class should be 0x00, but using Arduboy2's input functions, it should be 0xFF
+constexpr uint8 k_hardDropButton = 0x00;  // There's not a good button for hard drop. I'd prefer to have "hold" than hard drop
 constexpr uint8 k_holdButton = UP_BUTTON;
 
 constexpr uint8 k_frameRate = 60;
@@ -423,8 +424,6 @@ private:
   GameTicks m_ticksUntilAutoRepeatRight;
   bool m_isSoftDrop;
   bool m_hardDropButtonWasDown;
-  bool m_cwButtonWasDown;
-  bool m_ccwButtonWasDown;
 };
 
 class GameMode
@@ -464,11 +463,11 @@ public:
   // Returns true if the current state of the button is down, ignoring any history
   bool IsButtonDown(uint8 button) const { return (button & m_currentButtonDownFlags); }
   // Returns true if the button is down now, but wasn't last frame
-  bool IsButtonPressed(uint8 button) const { return (button & m_currentButtonDownFlags & ~m_previousButtonDownFlags); }
+  bool WasButtonPressed(uint8 button) const { return (button & m_currentButtonDownFlags & ~m_previousButtonDownFlags); }
   // Returns true if the button is down this frame and was also down last frame
-  bool IsButtonHeld(uint8 button) const { return (button & m_currentButtonDownFlags & m_previousButtonDownFlags); }
+  bool WasButtonHeld(uint8 button) const { return (button & m_currentButtonDownFlags & m_previousButtonDownFlags); }
   // Returns true if the button is up this frame, but was down last frame
-  bool IsButtonReleased(uint8 button) const { return (button & ~m_currentButtonDownFlags & m_previousButtonDownFlags); }
+  bool WasButtonReleased(uint8 button) const { return (button & ~m_currentButtonDownFlags & m_previousButtonDownFlags); }
 
 private:
   static bool SampleRawInput(uint8 buttons);
@@ -763,7 +762,7 @@ void Menus::Loop()
   switch (m_selectedIndex)
   {
     case 0: // "Play"
-      if (input.IsButtonPressed(A_BUTTON) | input.IsButtonPressed(B_BUTTON))
+      if (input.WasButtonPressed(A_BUTTON) | input.WasButtonPressed(B_BUTTON))
       {
         // TODO: Clean this up! There needs to be a better way to manage this state
         // Dirty workaround since m_startingLevel gets cleared in ResetGame()
@@ -776,11 +775,11 @@ void Menus::Loop()
     case 1: // "Mode"
       break;
     case 2: // "Level"
-      if ((m_startingLevel < k_maxStartingLevel) && (input.IsButtonPressed(B_BUTTON) || input.IsButtonPressed(RIGHT_BUTTON)))
+      if ((m_startingLevel < k_maxStartingLevel) && (input.WasButtonPressed(B_BUTTON) || input.WasButtonPressed(RIGHT_BUTTON)))
       {
         m_startingLevel++;
       }
-      if ((m_startingLevel > 0) && (input.IsButtonPressed(A_BUTTON) || input.IsButtonPressed(LEFT_BUTTON)))
+      if ((m_startingLevel > 0) && (input.WasButtonPressed(A_BUTTON) || input.WasButtonPressed(LEFT_BUTTON)))
       {
         m_startingLevel--;
       }
@@ -818,11 +817,11 @@ void Menus::Loop()
 void Menus::ProcessInput()
 {
   const Input& input = g.GetInput();
-  if (input.IsButtonPressed(UP_BUTTON))
+  if (input.WasButtonPressed(UP_BUTTON))
   {
     m_selectedIndex += countof(k_menuItems) - 1;
   }
-  if (input.IsButtonPressed(DOWN_BUTTON))
+  if (input.WasButtonPressed(DOWN_BUTTON))
   {
     m_selectedIndex++;
   }
@@ -835,7 +834,7 @@ void PlayingLoop()
 
   // "Hold" piece support
   PieceIndex knownNextPiece = PieceIndex::Invalid;
-  if (g.GetInput().IsButtonHeld(k_holdButton)) // 11520
+  if (g.GetInput().WasButtonPressed(k_holdButton))
   {
     // Hold is allowed to be used once per drop. It won't do anything if it's already been used.
     knownNextPiece = g_currentPiece.TryHold();
@@ -877,7 +876,7 @@ void GameOverLoop()
   arduboy.setCursorY((k_screenHeight - 7) / 2);
   arduboy.print(F("Game Over"));
 
-  if (g.GetInput().IsButtonReleased(A_BUTTON) || g.GetInput().IsButtonReleased(B_BUTTON))
+  if (g.GetInput().WasButtonReleased(A_BUTTON) || g.GetInput().WasButtonReleased(B_BUTTON))
   {
     ResetGame();
   }
@@ -1401,7 +1400,7 @@ void Next::ShuffleBag(uint8 startingIndex)
 uint8 Controller::ProcessMoveHorizontal(uint8 button, uint8& out_ticksUntilAutoRepeat)
 {
   int8 moveAmount = 0;
-  if (arduboy.pressed(button))
+  if (g.GetInput().IsButtonDown(button))
   {
     // A value of '0' here indicates the button wasn't down the previous frame
     if (out_ticksUntilAutoRepeat == 0)
@@ -1446,24 +1445,21 @@ void Controller::ProcessInput()
   }
 
   // Handle rotation input
-  bool cwButtonDown = arduboy.pressed(k_rotateCwButton);
-  if (cwButtonDown && !m_cwButtonWasDown)
+  const Input& input = g.GetInput();
+  if (input.WasButtonPressed(k_rotateCwButton))
   {
     g_currentPiece.TryRotate(RotationDirection::Clockwise);
   }
-  m_cwButtonWasDown = cwButtonDown;
-  
-  bool ccwButtonDown = arduboy.pressed(k_rotateCcwButton);
-  if (ccwButtonDown && !m_ccwButtonWasDown)
+
+  if (input.WasButtonPressed(k_rotateCcwButton))
   {
     g_currentPiece.TryRotate(RotationDirection::CounterClockwise);
   }
-  m_ccwButtonWasDown = ccwButtonDown;
 
   // Handle drop input
-  m_isSoftDrop = arduboy.pressed(k_softDropButton);
+  m_isSoftDrop = input.IsButtonDown(k_softDropButton);
 
-  bool hardDropButtonDown = arduboy.pressed(k_hardDropButton);
+  bool hardDropButtonDown = input.IsButtonDown(k_hardDropButton);
   if (hardDropButtonDown && !m_hardDropButtonWasDown)
   {
     g_currentPiece.DoHardDrop();
