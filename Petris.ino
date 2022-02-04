@@ -109,12 +109,21 @@ constexpr uint8 k_screenHeight = 64;
 constexpr GameTicks k_gameTicksPerSecond = 240;
 constexpr GameTicks k_gameTicksPerFrame = k_gameTicksPerSecond / k_frameRate;
 static_assert(k_gameTicksPerSecond == k_gameTicksPerFrame * k_frameRate, "Game Ticks should be an integer multiple of the frame rate");
+// Helper function to convert floating point seconds to GameTicks
+constexpr GameTicks SecondsToGameTicks(const float s)
+{
+  // There are likely safe ranges outside this, but [0..1] is the safe range
+  // TODO: Make this assert more robust and actually determine if the result will fit
+  Assert(((s * k_gameTicksPerSecond) <= 255) && ((s * k_gameTicksPerSecond) >= 0));
+  return GameTicks(s * k_gameTicksPerSecond);
+}
 
 constexpr uint8 k_gridWidth = 10;
 constexpr uint8 k_gridHeight = 24;
 constexpr uint8 k_defaultPieceSpawnX = 3;
 constexpr uint8 k_defaultPieceSpawnY = 21;  // Top 4 rows are hidden
 constexpr uint8 k_softDropSpeedScalar = 20;  // TODO: Reevaluate how soft drop speed is calculated to ensure it scales with speed correctly
+constexpr GameTicks k_defaultLockDownDelay = SecondsToGameTicks(0.5f);  // How long player has to manipulate piece once it has touched the groud
 
 // Guideline: ~0.3s before auto-repeat kicks in. 72 ticks = 0.3s. This likely wants to be an integer multiple of k_gameTicksPerFrame.
 constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
@@ -385,6 +394,7 @@ private:
   PieceOrientation m_orientation;
   // How many GameTicks until this piece falls to the next line
   GameTicks m_ticksToFall;
+  GameTicks m_ticksToLockDown;
   bool m_holdActionAvailable;
   // Tracks whether soft drop can be applied to this piece. Necessary to avoid a single soft-drop input hold from unintentionally affecting subsequent pieces.
   bool m_canSoftDrop;
@@ -1067,6 +1077,7 @@ bool CurrentPiece::SpawnNewPiece(PieceIndex knownNextPiece)
   m_y = k_defaultPieceSpawnY;
   m_orientation = PieceOrientation::North;
   m_ticksToFall = g_gameMode.GetFallTime();
+  m_ticksToLockDown = k_defaultLockDownDelay;
 
 #ifdef DEBUGGING_ENABLED
   const char* k_pieces[] = {"O", "I", "T", "L", "J", "S", "Z"};
@@ -1146,11 +1157,23 @@ void CurrentPiece::MoveDown(bool trySoftDrop)
         // Piece moved one line down. Subtract any remaining ticks to fall from the total to count and continue looping.
         ticksToSubtract -= m_ticksToFall;
         m_ticksToFall = g_gameMode.GetFallTime();
+        // If piece moved down, reset the lock down timer
+        m_ticksToLockDown = k_defaultLockDownDelay;
       }
       else
       {
-        // Piece couldn't fall. Lock it in, zero-out the current piece, and return.
-        LockPieceInGrid();
+        // Piece couldn't fall, decrement the lock down timer
+        if (m_ticksToLockDown <= k_gameTicksPerFrame)
+        {
+          // lock down timer expired, lock piece in
+          LockPieceInGrid();
+        }
+        else
+        {
+          // Decrement lock down timer
+          m_ticksToLockDown -= k_gameTicksPerFrame;
+        }
+        // Piece can't fall anymore, so exit the loop
         break;
       }
     }
