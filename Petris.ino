@@ -354,6 +354,7 @@ public:
     m_pieceIndex = PieceIndex::Invalid;
     m_holdPiece = PieceIndex::Invalid;
     m_holdActionAvailable = true;
+    m_canSoftDrop = false;
   }
 
   // Spawns a new piece at the top of the grid.
@@ -363,7 +364,7 @@ public:
   bool IsValidPiece() { return m_pieceIndex != PieceIndex::Invalid; }
   void Draw() const;
   void DrawShadow() const;
-  void MoveDown(bool isSoftDrop);
+  void MoveDown(bool trySoftDrop);
   void DoHardDrop();
   bool TryMove(int8 deltaX, int8 deltaY);
   // rotationDirection: clockwise or counter-clockwise
@@ -385,6 +386,8 @@ private:
   // How many GameTicks until this piece falls to the next line
   GameTicks m_ticksToFall;
   bool m_holdActionAvailable;
+  // Tracks whether soft drop can be applied to this piece. Necessary to avoid a single soft-drop input hold from unintentionally affecting subsequent pieces.
+  bool m_canSoftDrop;
 };
 
 // Manages the next piece and whatever randomization method is used to pick them
@@ -1102,17 +1105,30 @@ void CurrentPiece::DrawShadow() const
   }
 }
 
-void CurrentPiece::MoveDown(bool isSoftDrop)
+void CurrentPiece::MoveDown(bool trySoftDrop)
 {
   if (k_debugDisableGravity)
   {
-    if (!isSoftDrop)
+    if (!trySoftDrop)
     {
       return;
     }
   }
-  
-  uint8 ticksToSubtract = isSoftDrop ? k_softDropSpeedScalar * k_gameTicksPerFrame : k_gameTicksPerFrame;
+
+  uint8 ticksToSubtract = k_gameTicksPerFrame;
+  if (trySoftDrop)
+  {
+    if (m_canSoftDrop)
+    {
+      ticksToSubtract *= k_softDropSpeedScalar;
+    }
+  }
+  else
+  {
+    // Allow soft dropping after a single frame of not soft dropping.
+    // This forces the user to release the soft drop button between pieces.
+    m_canSoftDrop = true;
+  }
 
   // Loop to handle moving multiple lines per update
   while (ticksToSubtract > 0)
@@ -1259,6 +1275,7 @@ void CurrentPiece::LockPieceInGrid()
   
   // The hold action gets reset whenever a piece is locked down
   m_holdActionAvailable = true;
+  m_canSoftDrop = false;
 }
 
 //==========================================================================
