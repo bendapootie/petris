@@ -123,7 +123,10 @@ constexpr uint8 k_gridHeight = 24;
 constexpr uint8 k_defaultPieceSpawnX = 3;
 constexpr uint8 k_defaultPieceSpawnY = 21;  // Top 4 rows are hidden
 constexpr uint8 k_softDropSpeedScalar = 20;  // TODO: Reevaluate how soft drop speed is calculated to ensure it scales with speed correctly
-constexpr GameTicks k_defaultLockDownDelay = SecondsToGameTicks(0.5f);  // How long player has to manipulate piece once it has touched the groud
+// How long player has to manipulate piece once it has touched the groud
+constexpr GameTicks k_defaultLockDownDelay = SecondsToGameTicks(0.5f);
+// How many moves the player can make before the piece is locked down
+constexpr uint8 k_defaultLockDownMoveCount = 15;
 
 // Guideline: ~0.3s before auto-repeat kicks in. 72 ticks = 0.3s. This likely wants to be an integer multiple of k_gameTicksPerFrame.
 constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
@@ -381,10 +384,16 @@ public:
   // Tries to hold the current piece. If it can, the current piece is saved in m_holdPiece and then invalidated
   // and the hold piece is returned
   PieceIndex TryHold();
+  // Should be called whenever the current piece successfully moves or rotates
+  // so the movement lock down counter is kept up to date
+  void DecrementMoveLockDownCounter(uint8 moveAndRotationCount);
 
 protected:
   // Writes the current piece to the grid and invalidates the current piece
   void LockPieceInGrid();
+  // Sets the position of the piece (m_x, m_y)
+  // All changes to position should go through here to ensure lowest position is tracked correctly
+  void SetPiecePosition(uint8 newX, uint8 newY);
   
 private:
   PieceIndex m_pieceIndex;
@@ -394,7 +403,12 @@ private:
   PieceOrientation m_orientation;
   // How many GameTicks until this piece falls to the next line
   GameTicks m_ticksToFall;
-  GameTicks m_ticksToLockDown;
+  // How many GameTicks until piece locks down; resets if piece moves
+  GameTicks m_lockDownTickTimer;
+  // How many moves (horizontal or rotation) until the piece locks down; resets if piece drops to a lower "y" position
+  uint8 m_lockDownMoveCounter;
+  // Tracks the lowest 'y' coordinate the piece has been, to know when the lock down timer and counter should be reset
+  uint8 m_lockDownLowestY;
   bool m_holdActionAvailable;
   // Tracks whether soft drop can be applied to this piece. Necessary to avoid a single soft-drop input hold from unintentionally affecting subsequent pieces.
   bool m_canSoftDrop;
@@ -1073,11 +1087,12 @@ bool CurrentPiece::SpawnNewPiece(PieceIndex knownNextPiece)
     // Pull next piece from 7-bag (or other randomization abstraction)
     m_pieceIndex = g_next.GetNextPiece();
   }
-  m_x = k_defaultPieceSpawnX;
-  m_y = k_defaultPieceSpawnY;
+  SetPiecePosition(k_defaultPieceSpawnX, k_defaultPieceSpawnY);
   m_orientation = PieceOrientation::North;
   m_ticksToFall = g_gameMode.GetFallTime();
-  m_ticksToLockDown = k_defaultLockDownDelay;
+  m_lockDownTickTimer = k_defaultLockDownDelay;
+  m_lockDownMoveCounter = k_defaultLockDownMoveCount;
+  m_lockDownLowestY = m_y;
 
 #ifdef DEBUGGING_ENABLED
   const char* k_pieces[] = {"O", "I", "T", "L", "J", "S", "Z"};
@@ -1157,13 +1172,19 @@ void CurrentPiece::MoveDown(bool trySoftDrop)
         // Piece moved one line down. Subtract any remaining ticks to fall from the total to count and continue looping.
         ticksToSubtract -= m_ticksToFall;
         m_ticksToFall = g_gameMode.GetFallTime();
-        // If piece moved down, reset the lock down timer
-        m_ticksToLockDown = k_defaultLockDownDelay;
+        
+        // If piece moved down, check if it's a new lowest. If so, reset the lock down timer and move counter
+        if (m_y < m_lockDownLowestY)
+        {
+          m_lockDownLowestY = m_y;
+          m_lockDownTickTimer = k_defaultLockDownDelay;
+          m_lockDownMoveCounter = k_defaultLockDownMoveCount;
+        }
       }
       else
       {
         // Piece couldn't fall, decrement the lock down timer
-        if (m_ticksToLockDown <= k_gameTicksPerFrame)
+        if (m_lockDownTickTimer <= k_gameTicksPerFrame)
         {
           // lock down timer expired, lock piece in
           LockPieceInGrid();
@@ -1171,7 +1192,7 @@ void CurrentPiece::MoveDown(bool trySoftDrop)
         else
         {
           // Decrement lock down timer
-          m_ticksToLockDown -= k_gameTicksPerFrame;
+          m_lockDownTickTimer -= k_gameTicksPerFrame;
         }
         // Piece can't fall anymore, so exit the loop
         break;
@@ -1195,8 +1216,7 @@ bool CurrentPiece::TryMove(int8 deltaX, int8 deltaY)
   if (GetPieceData().DoesPieceFitInGrid(m_orientation, m_x + deltaX, m_y + deltaY))
   {
     // All the checks passed; move the piece
-    m_x += deltaX;
-    m_y += deltaY;
+    SetPiecePosition(m_x + deltaX, m_y + deltaY);
     // Move succeeded; return true
     return true;
   }
@@ -1236,11 +1256,12 @@ bool CurrentPiece::TryRotate(RotationDirection rotationDirection)
       Serial.print(g_debugStr);
 #endif // #ifdef DEBUGGING_ENABLED
     }
-    
-    if (GetPieceData().DoesPieceFitInGrid(testOrientation, m_x + deltaX, m_y + deltaY))
+
+    const uint8 newX = m_x + deltaX;
+    const uint8 newY = m_y + deltaY;
+    if (GetPieceData().DoesPieceFitInGrid(testOrientation, newX, newY))
     {
-      m_x += deltaX;
-      m_y += deltaY;
+      SetPiecePosition(newX, newY);
       m_orientation = testOrientation;
       // Rotation succeeded; return true
       return true;
@@ -1281,6 +1302,26 @@ PieceIndex CurrentPiece::TryHold()
   return oldHoldPiece;
 }
 
+void CurrentPiece::DecrementMoveLockDownCounter(uint8 moveAndRotationCount)
+{
+  if (moveAndRotationCount > 0)
+  {
+    // Since these values are unsigned, extra care is taken to avoid wrapping
+    if (moveAndRotationCount >= m_lockDownMoveCounter)
+    {
+      // All moves have been used; lock down is imminent
+      m_lockDownMoveCounter = 0;
+    }
+    else
+    {
+      // Decrement the move counter by how many moves were made
+      m_lockDownMoveCounter -= moveAndRotationCount;
+      // Reset the lock down timer
+      m_lockDownTickTimer = k_defaultLockDownDelay;
+    }
+  }
+}
+
 void CurrentPiece::LockPieceInGrid()
 {
   // Write all the blocks to the grid
@@ -1299,6 +1340,12 @@ void CurrentPiece::LockPieceInGrid()
   // The hold action gets reset whenever a piece is locked down
   m_holdActionAvailable = true;
   m_canSoftDrop = false;
+}
+
+void CurrentPiece::SetPiecePosition(uint8 newX, uint8 newY)
+{
+  m_x = newX;
+  m_y = newY;
 }
 
 //==========================================================================
@@ -1476,11 +1523,17 @@ void Controller::ProcessInput()
   int8 moveAmount = 0;
   moveAmount -= ProcessMoveHorizontal(k_leftButton, m_ticksUntilAutoRepeatLeft);
   moveAmount += ProcessMoveHorizontal(k_rightButton, m_ticksUntilAutoRepeatRight);
+
+  // Counts how many successful moves and rotations were applied
+  uint8 moveAndRotationCount = 0;
   
-  int8 moveDelta = (moveAmount < 0) ? -1 : +1;
+  const int8 moveDelta = (moveAmount < 0) ? -1 : +1;
   while (moveAmount != 0)
   {
-    g_currentPiece.TryMove(moveDelta, 0);
+    if (g_currentPiece.TryMove(moveDelta, 0))
+    {
+      moveAndRotationCount++;
+    }
     moveAmount -= moveDelta;
   }
 
@@ -1488,13 +1541,22 @@ void Controller::ProcessInput()
   const Input& input = g.GetInput();
   if (input.WasButtonPressed(k_rotateCwButton))
   {
-    g_currentPiece.TryRotate(RotationDirection::Clockwise);
+    if (g_currentPiece.TryRotate(RotationDirection::Clockwise))
+    {
+      moveAndRotationCount++;
+    }
   }
 
   if (input.WasButtonPressed(k_rotateCcwButton))
   {
-    g_currentPiece.TryRotate(RotationDirection::CounterClockwise);
+    if (g_currentPiece.TryRotate(RotationDirection::CounterClockwise))
+    {
+      moveAndRotationCount++;
+    }
   }
+  
+  // Successful moves and rotations decrements the lock down movement counter
+  g_currentPiece.DecrementMoveLockDownCounter(moveAndRotationCount);
 
   // Handle drop input
   m_isSoftDrop = input.IsButtonDown(k_softDropButton);
