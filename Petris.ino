@@ -366,7 +366,6 @@ public:
     m_pieceIndex = PieceIndex::Invalid;
     m_holdPiece = PieceIndex::Invalid;
     m_holdActionAvailable = true;
-    m_canSoftDrop = false;
   }
 
   // Spawns a new piece at the top of the grid.
@@ -410,8 +409,6 @@ private:
   // Tracks the lowest 'y' coordinate the piece has been, to know when the lock down timer and counter should be reset
   uint8 m_lockDownLowestY;
   bool m_holdActionAvailable;
-  // Tracks whether soft drop can be applied to this piece. Necessary to avoid a single soft-drop input hold from unintentionally affecting subsequent pieces.
-  bool m_canSoftDrop;
 };
 
 // Manages the next piece and whatever randomization method is used to pick them
@@ -1144,16 +1141,7 @@ void CurrentPiece::MoveDown(bool trySoftDrop)
   uint8 ticksToSubtract = k_gameTicksPerFrame;
   if (trySoftDrop)
   {
-    if (m_canSoftDrop)
-    {
-      ticksToSubtract *= k_softDropSpeedScalar;
-    }
-  }
-  else
-  {
-    // Allow soft dropping after a single frame of not soft dropping.
-    // This forces the user to release the soft drop button between pieces.
-    m_canSoftDrop = true;
+    ticksToSubtract *= k_softDropSpeedScalar;
   }
 
   // Loop to handle moving multiple lines per update
@@ -1339,7 +1327,6 @@ void CurrentPiece::LockPieceInGrid()
   
   // The hold action gets reset whenever a piece is locked down
   m_holdActionAvailable = true;
-  m_canSoftDrop = false;
 }
 
 void CurrentPiece::SetPiecePosition(uint8 newX, uint8 newY)
