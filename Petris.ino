@@ -16,8 +16,8 @@
   #define TEST_BUILD
   //#define GAME_BUILD
   #define DEBUGGING_ENABLED
-  
-// DEBUG - runs the game with debug features enabled 
+
+// DEBUG - runs the game with debug features enabled
 #elif defined CONFIGURATION_DEBUG
   #if defined(CONFIGURATION_TEST) || defined (CONFIGURATION_RELEASE)
     #error Multiple configurations were defined! Only one is allowed.
@@ -25,7 +25,7 @@
   //#define TEST_BUILD
   #define GAME_BUILD
   #define DEBUGGING_ENABLED
-  
+
 // RELEASE - runs the game without any debugging
 #elif defined CONFIGURATION_RELEASE
   #if defined(CONFIGURATION_TEST) || defined (CONFIGURATION_DEBUG)
@@ -34,7 +34,7 @@
   //#define TEST_BUILD
   #define GAME_BUILD
   //#define DEBUGGING_ENABLED   // Debugging is not enabled for release builds
-  
+
 #else
   #error No valid build configuration defined!
 #endif
@@ -114,7 +114,10 @@ constexpr GameTicks SecondsToGameTicks(const float s)
 {
   // There are likely safe ranges outside this, but [0..1] is the safe range
   // TODO: Make this assert more robust and actually determine if the result will fit
+  // TODO: Also make the assert compile in Test builds
+#if !defined TEST_BUILD
   Assert(((s * k_gameTicksPerSecond) <= 255) && ((s * k_gameTicksPerSecond) >= 0));
+#endif
   return GameTicks(s * k_gameTicksPerSecond);
 }
 
@@ -239,24 +242,40 @@ class Grid
 public:
   Grid() {}
 
-  constexpr uint8 GetIndex(uint8 x, uint8 y) { return x + (y * k_gridWidth); }
-  constexpr uint8 GetWidth() { return k_gridWidth; }
-  constexpr uint8 GetHeight() { return k_gridHeight; }
+  constexpr uint8 GetIndex(uint8 x, uint8 y) {
+    return x + (y * k_gridWidth);
+  }
+  constexpr uint8 GetWidth() {
+    return k_gridWidth;
+  }
+  constexpr uint8 GetHeight() {
+    return k_gridHeight;
+  }
 
-  void Clear() { memset(m_grid, 0x00, sizeof(m_grid)); }
+  void Clear() {
+    memset(m_grid, 0x00, sizeof(m_grid));
+  }
 
   // Note: It's not necessary to check for >= 0 because the passed in values are unsigned
-  bool IsValidPosition(uint8 x, uint8 y) const { return (x < k_gridWidth) && (y < k_gridHeight); }
-  BlockIndex Get(uint8 x, uint8 y) const { return m_grid[GetIndex(x, y)]; }
-  void Set(uint8 x, uint8 y, BlockIndex value) { m_grid[GetIndex(x, y)] = value; }
-  bool IsEmpty(uint8 x, uint8 y) const { return Get(x, y) == 0; }
+  bool IsValidPosition(uint8 x, uint8 y) const {
+    return (x < k_gridWidth) && (y < k_gridHeight);
+  }
+  BlockIndex Get(uint8 x, uint8 y) const {
+    return m_grid[GetIndex(x, y)];
+  }
+  void Set(uint8 x, uint8 y, BlockIndex value) {
+    m_grid[GetIndex(x, y)] = value;
+  }
+  bool IsEmpty(uint8 x, uint8 y) const {
+    return Get(x, y) == 0;
+  }
 
 #ifdef DEBUGGING_ENABLED
   void DebugPrint(const char* msg) const;
 #endif // #ifdef DEBUGGING_ENABLED
   void Draw() const;
   void ProcessFullLines();
-  
+
 private:
   BlockIndex m_grid[k_gridWidth * k_gridHeight];
   static_assert(k_gridWidth * k_gridHeight <= 256, "If grid is larger than 256, grid indices will no longer fit in uint8");
@@ -301,7 +320,7 @@ public:
     // Because rotationIndex of 0 isn't saved in m_rotationData, the array index is one off of rotationIndex
     return m_rotationData[uint8(direction)][uint8(startingOrientation)][rotationIndex - 1];
   }
-  
+
 // Public member so it can use bracket initialization
 public:
   static constexpr uint8 k_numAlternateRotationOffsets = 4;
@@ -325,7 +344,7 @@ public:
   constexpr uint8 GetNumBlocksInPiece() { return 4; }
 
   // orientation : Orientation of the piece to check (North is default)
-  // pieceX, pieceY : (x, y) grid position of piece origin to check 
+  // pieceX, pieceY : (x, y) grid position of piece origin to check
   // Returns 'true' if all blocks of this piece at this location and orientation are empty in the grid
   // Returns 'false' if something in the grid would block the piece from being here
   bool DoesPieceFitInGrid(PieceOrientation orientation, uint8 pieceX, uint8 pieceY) const;
@@ -343,7 +362,7 @@ public:
   const RotationOffsets* GetRotationOffsets() const { return m_rotationOffsets; }
 
   void Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const;
-  
+
 private:
   // Data that describes alternative rotation offsets for the piece.
   // Used to support wall kick, floor kick, and other non-default rotations
@@ -393,7 +412,7 @@ protected:
   // Sets the position of the piece (m_x, m_y)
   // All changes to position should go through here to ensure lowest position is tracked correctly
   void SetPiecePosition(uint8 newX, uint8 newY);
-  
+
 private:
   PieceIndex m_pieceIndex;
   PieceIndex m_holdPiece;
@@ -420,11 +439,11 @@ public:
   // Prints the current state of the next queue
   void DebugPrint() const;
 #endif // #ifdef TEST_BUILD
-  
+
   void Reset();
   PieceIndex GetNextPiece();
   void Draw(BlockIndex blockIndex) const;
-  
+
 private:
   void ShuffleBag(uint8 startingIndex);
 private:
@@ -442,7 +461,7 @@ public:
 private:
   // Helper function for handling horizontal auto-repeat timing
   static uint8 ProcessMoveHorizontal(uint8 button, uint8& out_ticksUntilAutoRepeat);
-  
+
 private:
   GameTicks m_ticksUntilAutoRepeatLeft;
   GameTicks m_ticksUntilAutoRepeatRight;
@@ -554,17 +573,17 @@ const RotationOffsets k_rotationOffsetsI = {{
 const RotationOffsets k_rotationOffsetsT = {{
   {
     // Clockwise Rotations
-    {{-1, 0}, {-1,  1}, { 0,  0}, {-1, -2}},  // North -> East
+    {{ -1, 0}, { -1,  1}, { 0,  0}, { -1, -2}}, // North -> East
     {{ 1, 0}, { 1,  1}, { 0,  2}, { 1,  2}},  // East -> South
     {{ 1, 0}, { 0,  0}, { 0,  2}, { 1,  2}},  // South -> West
-    {{-1, 0}, {-1, -1}, { 0,  2}, {-1,  2}}   // West -> North
+    {{ -1, 0}, { -1, -1}, { 0,  2}, { -1,  2}} // West -> North
   },
   {
     // Counter-Clockwise Rotations
     {{ 1, 0}, { 1,  1}, { 0,  0}, { 1, -2}},  // North -> West
     {{ 1, 0}, { 1, -1}, { 0,  2}, { 1,  2}},  // East -> North
-    {{-1, 0}, { 0,  0}, { 0,  2}, {-1,  2}},  // South -> East
-    {{-1, 0}, {-1, -1}, { 0,  2}, {-1,  2}}   // West -> South
+    {{ -1, 0}, { 0,  0}, { 0,  2}, { -1,  2}}, // South -> East
+    {{ -1, 0}, { -1, -1}, { 0,  2}, { -1,  2}} // West -> South
   }
 }};
 
@@ -572,17 +591,17 @@ const RotationOffsets k_rotationOffsetsT = {{
 const RotationOffsets k_rotationOffsetsLJSAndZ = {{
   {
     // Clockwise Rotations
-    {{-1, 0}, {-1,  1}, { 0, -2}, {-1, -2}},  // North -> East
+    {{ -1, 0}, { -1,  1}, { 0, -2}, { -1, -2}}, // North -> East
     {{ 1, 0}, { 1, -1}, { 0,  2}, { 1,  2}},  // East -> South
     {{ 1, 0}, { 1,  1}, { 0, -2}, { 1, -2}},  // South -> West
-    {{-1, 0}, {-1, -1}, { 0,  2}, {-1,  2}}   // West -> North
+    {{ -1, 0}, { -1, -1}, { 0,  2}, { -1,  2}} // West -> North
   },
   {
     // Counter-Clockwise Rotations
     {{ 1, 0}, { 1,  1}, { 0, -2}, { 1, -2}},  // North -> West
     {{ 1, 0}, { 1, -1}, { 0,  2}, { 1,  2}},  // East -> North
-    {{-1, 0}, {-1,  1}, { 0, -2}, {-1, -2}},  // South -> East
-    {{-1, 0}, {-1, -1}, { 0,  2}, {-1,  2}}   // West -> South
+    {{ -1, 0}, { -1,  1}, { 0, -2}, { -1, -2}}, // South -> East
+    {{ -1, 0}, { -1, -1}, { 0,  2}, { -1,  2}} // West -> South
   }
 }};
 
@@ -617,7 +636,7 @@ void setup()
 {
 #ifdef DEBUGGING_ENABLED
   Serial.begin(9600);
-  while(!Serial); // wait for serial port to connect. Needed for native USB
+  while (!Serial); // wait for serial port to connect. Needed for native USB
 #endif // #ifdef DEBUGGING_ENABLED
   arduboy.begin();
   arduboy.setFrameRate(k_frameRate);
@@ -661,7 +680,7 @@ void setup()
 {
 #ifdef DEBUGGING_ENABLED
   Serial.begin(9600);
-  while(!Serial); // wait for serial port to connect. Needed for native USB
+  while (!Serial); // wait for serial port to connect. Needed for native USB
 #endif // #ifdef DEBUGGING_ENABLED
   arduboy.begin();
   arduboy.setFrameRate(k_frameRate);
@@ -676,16 +695,205 @@ void loop()
   }
 
   static uint8 s_frameNum = 0;
-  switch(s_frameNum)
+  switch (s_frameNum)
   {
     case 0: arduboy.clear(); break;
     case 1: RunTest(Next::UnitTest); break;
     case 2: RunTest(TestFailure); break;
-    case 3: break;
+    case 3: RunTest(TestSprite); break;
+    case 4: break;
   }
-  if (s_frameNum < 255) { s_frameNum++; }
-  
+  if (s_frameNum < 255) {
+    s_frameNum++;
+  }
+
   arduboy.display();
+}
+
+constexpr uint8 ___ = 0x00;
+constexpr uint8 __O = 0x01;
+constexpr uint8 _O_ = 0x02;
+constexpr uint8 _OO = 0x03;
+constexpr uint8 O__ = 0x04;
+constexpr uint8 O_O = 0x05;
+constexpr uint8 OO_ = 0x06;
+constexpr uint8 OOO = 0x07;
+
+void TestSprite()
+{
+  static
+  const unsigned char PROGMEM PetrisBlocks[] =
+  {
+    // width, height,
+    3, 8,
+
+    // [0] : Solid Square
+    OOO,
+    OOO,
+    OOO,
+
+    // [1] : Square w/Hole
+    OOO,
+    O_O,
+    OOO,
+
+    // [2..11] Tron Square
+    OOO,  // North ->
+    __O,  // North cap
+    OOO,
+
+    O_O,
+    O_O,  // East cap
+    OOO,
+
+    OOO,
+    O__,  // South cap
+    OOO,
+
+    OOO,
+    O_O,  // West cap
+    O_O,
+
+    OOO,
+    __O,  // NW corner
+    O_O,
+
+    O_O,
+    __O,  // NE corner
+    OOO,
+
+    O_O,
+    O__,  // SE corner
+    OOO,
+
+    OOO,
+    O__,  // SW corner
+    O_O,
+
+    OOO,
+    ___,  // N-S block
+    OOO,
+
+    O_O,
+    O_O,  // E-W block
+    O_O,
+
+    // [12..17] Tron Angled
+    OO_,  // North ->
+    __O,  // North cap
+    OOO,
+
+    O_O,
+    O_O,  // East cap
+    _OO,
+
+    OOO,
+    O__,  // South cap
+    _OO,
+
+    OO_,
+    O_O,  // West cap
+    O_O,
+
+    OO_,
+    __O,  // NW corner
+    O_O,
+
+    // NE corner    // Duplicate of Tron Square : NE corner
+
+    O_O,
+    O__,  // SE corner
+    _OO,
+
+    // SW corner    // Duplicate of Tron Square : SW corner
+
+    // [18..27] Simple Dither
+    _O_,
+    O_O,  // 'o' dither
+    _O_,
+
+    O_O,
+    _O_,  // 'x' dither
+    O_O,
+
+    _OO,
+    O_O,  // North cap
+    _OO,
+
+    _O_,
+    O_O,  // East cap
+    OOO,
+
+    OO_,
+    O_O,  // South cap
+    OO_,
+
+    OOO,
+    O_O,  // West cap
+    _O_,
+
+    _OO,
+    O_O,  // NW corner
+    _O_,
+
+    _O_,
+    O_O,  // NE corner
+    _OO,
+
+    _O_,
+    O_O,  // SE corner
+    OO_,
+
+    OO_,
+    O_O,  // SW corner
+    _O_,
+
+    // [28..32] Rotation Aware Dither
+    OOO,
+    O_O,  // NW large cap
+    _OO,
+
+    // Unused
+    //_OO,
+    //O_O,  // NE large cap
+    //OOO,
+
+    // Unused
+    //OO_,
+    //O_O,  // SE large cap
+    //OOO,
+
+    OOO,
+    O_O,  // SW large cap
+    OO_,
+
+    // NW small cap    // Duplicate of Simple Dither : NW corner
+    // NE small cap    // Duplicate of Simple Dither : NE corner
+    // SE small cap    // Duplicate of Simple Dither : SE corner
+    // SW small cap    // Duplicate of Simple Dither : SW corner
+
+    OOO,
+    _OO,  // NW medium cap
+    O_O,
+
+    O_O,
+    _OO,  // NE medium cap
+    OOO,
+
+    // Unused
+    //O_O,
+    //OO_,  // SE medium cap
+    //OOO,
+
+    OOO,
+    OO_,  // SW medium cap
+    O_O,
+  };
+
+  for (uint8 i = 0; i < countof(PetrisBlocks) / 3; i++)
+  {
+    Sprites::drawOverwrite((i % 32) * 4, 28 + ((i / 32) * 9), PetrisBlocks, i);
+  }
 }
 
 void TestFailure()
@@ -726,12 +934,12 @@ void __RunTestHelper(const __FlashStringHelper* testName, void(*testFunction)())
 void Global::Loop()
 {
   m_input.Update();
-  
+
   switch (g_gameState)
   {
     case GameState::MainMenu:
       g_menus.Loop();
-    break;
+      break;
     case GameState::Playing:
       PlayingLoop();
       break;
@@ -765,7 +973,7 @@ bool Input::SampleRawInput(uint8 buttons)
 void ResetGame()
 {
   arduboy.clear();
-  
+
   g_grid.Clear();
   g_gameMode.Reset();
   // TODO: This should be incorporated into GameMode
@@ -821,7 +1029,7 @@ void Menus::Loop()
   {
     return;
   }
-  
+
   for (uint8 i = 0; i < countof(k_menuItems); i++)
   {
     arduboy.print(m_selectedIndex == i ? F("> ") : F("   "));
@@ -863,7 +1071,7 @@ void PlayingLoop()
     // Hold is allowed to be used once per drop. It won't do anything if it's already been used.
     knownNextPiece = g_currentPiece.TryHold();
   }
-  
+
   if (!g_currentPiece.IsValidPiece())
   {
     // Test for, and remove full lines
@@ -951,7 +1159,7 @@ void Grid::Draw() const
   arduboy.drawLine(k_borderLeftPos, 0, k_borderLeftPos, k_borderBottomPos, WHITE);
   arduboy.drawLine(k_borderRightPos, 0, k_borderRightPos, k_borderBottomPos, WHITE);
   arduboy.drawLine(k_borderLeftPos, k_borderBottomPos, k_borderRightPos, k_borderBottomPos, WHITE);
-  
+
   // Draw blocks
   for (uint8 y = 0; y < k_gridHeight; y++)
   {
@@ -1095,7 +1303,7 @@ bool CurrentPiece::SpawnNewPiece(PieceIndex knownNextPiece)
   const char* k_pieces[] = {"O", "I", "T", "L", "J", "S", "Z"};
   Serial.println(k_pieces[uint8(m_pieceIndex)]);
 #endif // #ifdef DEBUGGING_ENABLED
-  
+
   // Check if new piece overlaps with anything on the board
   return GetPieceData().DoesPieceFitInGrid(m_orientation, m_x, m_y);
 }
@@ -1160,7 +1368,7 @@ void CurrentPiece::MoveDown(bool trySoftDrop)
         // Piece moved one line down. Subtract any remaining ticks to fall from the total to count and continue looping.
         ticksToSubtract -= m_ticksToFall;
         m_ticksToFall = g_gameMode.GetFallTime();
-        
+
         // If piece moved down, check if it's a new lowest. If so, reset the lock down timer and move counter
         if (m_y < m_lockDownLowestY)
         {
@@ -1231,16 +1439,16 @@ bool CurrentPiece::TryRotate(RotationDirection rotationDirection)
       offset.UnpackOffset(deltaX, deltaY);
 #ifdef DEBUGGING_ENABLED
       sprintf(g_debugStr,
-        "Piece:%d (%d, %d) Orient:%s Rot:%s[%d] delta(%d, %d)\n",
-        int(m_pieceIndex),
-        int(m_x),
-        int(m_y),
-        m_orientation == PieceOrientation::North ? ("N") : (m_orientation == PieceOrientation::East ? ("E") : (m_orientation == PieceOrientation::South ? ("S") : ("W"))),
-        (rotationDirection == RotationDirection::Clockwise) ? ("cw") : ("ccw"),
-        int(rotationIndex),
-        int(deltaX),
-        int(deltaY)
-      );
+              "Piece:%d (%d, %d) Orient:%s Rot:%s[%d] delta(%d, %d)\n",
+              int(m_pieceIndex),
+              int(m_x),
+              int(m_y),
+              m_orientation == PieceOrientation::North ? ("N") : (m_orientation == PieceOrientation::East ? ("E") : (m_orientation == PieceOrientation::South ? ("S") : ("W"))),
+              (rotationDirection == RotationDirection::Clockwise) ? ("cw") : ("ccw"),
+              int(rotationIndex),
+              int(deltaX),
+              int(deltaY)
+             );
       Serial.print(g_debugStr);
 #endif // #ifdef DEBUGGING_ENABLED
     }
@@ -1255,7 +1463,7 @@ bool CurrentPiece::TryRotate(RotationDirection rotationDirection)
       return true;
     }
   }
-  
+
   // Rotation failed; return false
   return false;
 }
@@ -1284,7 +1492,7 @@ PieceIndex CurrentPiece::TryHold()
     Assert(m_holdPiece != PieceIndex::Invalid);
     const BlockIndex nextBlock = 1;
     g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, nextBlock, k_holdDisplayLeft, k_holdDisplayBottom);
-    
+
     DebugPrintLine(F("Hold"));
   }
   return oldHoldPiece;
@@ -1324,7 +1532,7 @@ void CurrentPiece::LockPieceInGrid()
 
   // Invalidate the piece now that it's been written to the grid
   m_pieceIndex = PieceIndex::Invalid;
-  
+
   // The hold action gets reset whenever a piece is locked down
   m_holdActionAvailable = true;
 }
@@ -1370,7 +1578,7 @@ void Next::UnitTest()
       test.DebugPrint();
       pieceCounts[uint8(test.GetNextPiece())]++;
     }
-  
+
     // Make sure all pieces were chosen the same number of times
     bool allChosen = true;
     for (uint8 i = 0; i < countof(pieceCounts); i++)
@@ -1513,7 +1721,7 @@ void Controller::ProcessInput()
 
   // Counts how many successful moves and rotations were applied
   uint8 moveAndRotationCount = 0;
-  
+
   const int8 moveDelta = (moveAmount < 0) ? -1 : +1;
   while (moveAmount != 0)
   {
@@ -1541,7 +1749,7 @@ void Controller::ProcessInput()
       moveAndRotationCount++;
     }
   }
-  
+
   // Successful moves and rotations decrements the lock down movement counter
   g_currentPiece.DecrementMoveLockDownCounter(moveAndRotationCount);
 
@@ -1568,7 +1776,7 @@ uint8 GameMode::GetFallTime() const
     240, 190, 148, 113, 85, 63, 46, 32, 23, 15, 10, 7, 4, 3, 2, 1, 1, 0
   };
   constexpr uint8 k_numFallSpeeds = countof(k_fallSpeeds) - 1;
-  
+
   // If m_level is bigger than the above array supports, clamp to the last (fastest) value
   return pgm_read_byte_near(k_fallSpeeds + Min(m_level, k_numFallSpeeds));
 }
