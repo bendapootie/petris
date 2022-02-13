@@ -1,5 +1,7 @@
 #include <Arduboy2.h>
 
+#include "Sprites.h"
+
 //==========================================================================
 // Build configuration
 //--------------------------------------------------------------------------
@@ -54,32 +56,79 @@ using int32 = int32_t;
 // Aliased types for giving the illusion of type-safety
 // Some day, maybe these will be replaced with a templated type-safe solution?
 using GameTicks = uint8;
-using BlockIndex = uint8;
 
 
 // Define DEBUGGING_ENABLED to enable Asserts, Serial port output, and extra debugging
 // Note: If this is defined before the types, I get compiler errors?!?
 #ifdef DEBUGGING_ENABLED
-char g_debugStr[80];
-void DebugPrint(const __FlashStringHelper* msg) { Serial.print(msg); }
-void DebugPrintLine(const __FlashStringHelper* msg) { Serial.println(msg); }
-void __AssertFunction(const char* func, int line, bool condition, const __FlashStringHelper* msg = nullptr)
-{
-  if (!condition)
+  // TODO: Figure out how to use __FlashStringHelper* string here to avoid eating up dynamic memory
+  static const char* s_stackTrace[10];
+  static short s_stackTraceLine[10];
+  static uint8 s_stackDepth = 0;
+  class DebugStackTracker
   {
-    Serial.print(F("Assert Failed! "));
-    Serial.print(func);
-    Serial.print(F("("));
-    Serial.print(line);
-    Serial.print(F(") - "));
-    Serial.println(msg);
+  public:
+    DebugStackTracker(const char* func, short line)
+    {
+      s_stackTrace[s_stackDepth] = func;
+      s_stackTraceLine[s_stackDepth] = line;
+      s_stackDepth++;
+    }
+    ~DebugStackTracker()
+    {
+      s_stackDepth--;
+    }
+
+    static void PrintStack();
+  private:
+  };
+  // static
+  void DebugStackTracker::PrintStack()
+  {
+    for (uint8 i = 0; i < s_stackDepth; i++)
+    {
+      if (i != 0)
+      {
+        Serial.print(" - ");
+      }
+      Serial.print(s_stackTrace[i]);
+      Serial.print("(");
+      Serial.print(s_stackTraceLine[i]);
+      Serial.print(")");
+    }
   }
-}
-#define Assert(condition, ...) __AssertFunction(__FUNCTION__, __LINE__, (condition), ##__VA_ARGS__)
+
+
+  // Instrumentation for getting at least partial stack traces from failed asserts
+  // Usage: Sprinkle these around at the top of functions to get better data from asserts
+  #define DebugStack DebugStackTracker __debugStackTracker(__FUNCTION__, __LINE__)
+
+
+  char g_debugStr[80];
+  void DebugPrint(const __FlashStringHelper* msg) { Serial.print(msg); }
+  void DebugPrintLine(const __FlashStringHelper* msg) { Serial.println(msg); }
+  void __AssertFunction(const char* func, int line, bool condition, const __FlashStringHelper* msg = nullptr)
+  {
+    if (!condition)
+    {
+      Serial.print(F("Assert Failed! "));
+      Serial.print(func);
+      Serial.print(F("("));
+      Serial.print(line);
+      Serial.print(F(") - "));
+      Serial.println(msg == nullptr ? F("") : msg);
+      Serial.print(F("Stack: "));
+      DebugStackTracker::PrintStack();
+      Serial.println();
+    }
+  }
+  #define Assert(condition, ...) __AssertFunction(__FUNCTION__, __LINE__, (condition), ##__VA_ARGS__)
+
 #else // #ifdef DEBUGGING_ENABLED
-void DebugPrint(...) {}
-void DebugPrintLine(...) {}
-#define Assert(condition, ...) {}
+  void DebugPrint(...) {}
+  void DebugPrintLine(...) {}
+  #define Assert(condition, ...) {}
+  #define DebugStack {}
 #endif // #else // #ifdef DEBUGGING_ENABLED
 
 
@@ -112,12 +161,7 @@ static_assert(k_gameTicksPerSecond == k_gameTicksPerFrame * k_frameRate, "Game T
 // Helper function to convert floating point seconds to GameTicks
 constexpr GameTicks SecondsToGameTicks(const float s)
 {
-  // There are likely safe ranges outside this, but [0..1] is the safe range
-  // TODO: Make this assert more robust and actually determine if the result will fit
-  // TODO: Also make the assert compile in Test builds
-#if !defined TEST_BUILD
-  Assert(((s * k_gameTicksPerSecond) <= 255) && ((s * k_gameTicksPerSecond) >= 0));
-#endif
+  // NOTE: Since this a constexpr function, we can't add runtime checks to ensure the value is in range
   return GameTicks(s * k_gameTicksPerSecond);
 }
 
@@ -130,6 +174,10 @@ constexpr uint8 k_softDropSpeedScalar = 20;  // TODO: Reevaluate how soft drop s
 constexpr GameTicks k_defaultLockDownDelay = SecondsToGameTicks(0.5f);
 // How many moves the player can make before the piece is locked down
 constexpr uint8 k_defaultLockDownMoveCount = 15;
+
+// TODO: This is temporary until variety and customization is implemented
+constexpr BlockIndex k_defaultBlockIndex = BlockIndex::O;//Donut;
+constexpr BlockIndex k_defaultShadowBlockIndex = BlockIndex::CenterDot;
 
 // Guideline: ~0.3s before auto-repeat kicks in. 72 ticks = 0.3s. This likely wants to be an integer multiple of k_gameTicksPerFrame.
 constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
@@ -242,33 +290,17 @@ class Grid
 public:
   Grid() {}
 
-  constexpr uint8 GetIndex(uint8 x, uint8 y) {
-    return x + (y * k_gridWidth);
-  }
-  constexpr uint8 GetWidth() {
-    return k_gridWidth;
-  }
-  constexpr uint8 GetHeight() {
-    return k_gridHeight;
-  }
+  constexpr uint8 GetIndex(uint8 x, uint8 y) { return x + (y * k_gridWidth); }
+  constexpr uint8 GetWidth() { return k_gridWidth; }
+  constexpr uint8 GetHeight() { return k_gridHeight; }
 
-  void Clear() {
-    memset(m_grid, 0x00, sizeof(m_grid));
-  }
+  void Clear() { memset(m_grid, 0x00, sizeof(m_grid)); }
 
   // Note: It's not necessary to check for >= 0 because the passed in values are unsigned
-  bool IsValidPosition(uint8 x, uint8 y) const {
-    return (x < k_gridWidth) && (y < k_gridHeight);
-  }
-  BlockIndex Get(uint8 x, uint8 y) const {
-    return m_grid[GetIndex(x, y)];
-  }
-  void Set(uint8 x, uint8 y, BlockIndex value) {
-    m_grid[GetIndex(x, y)] = value;
-  }
-  bool IsEmpty(uint8 x, uint8 y) const {
-    return Get(x, y) == 0;
-  }
+  bool IsValidPosition(uint8 x, uint8 y) const { return (x < k_gridWidth) && (y < k_gridHeight); }
+  BlockIndex Get(uint8 x, uint8 y) const { return m_grid[GetIndex(x, y)]; }
+  void Set(uint8 x, uint8 y, BlockIndex value) { m_grid[GetIndex(x, y)] = value; }
+  bool IsEmpty(uint8 x, uint8 y) const { return Get(x, y) == BlockIndex::Empty; }
 
 #ifdef DEBUGGING_ENABLED
   void DebugPrint(const char* msg) const;
@@ -701,7 +733,22 @@ void loop()
     case 1: RunTest(Next::UnitTest); break;
     case 2: RunTest(TestFailure); break;
     case 3: RunTest(TestSprite); break;
-    case 4: break;
+    default:
+      {
+        static uint8 s_x = k_screenWidth / 2;
+        static uint8 s_y = k_screenHeight / 2;
+        static BlockIndex s_block = BlockIndex::SolidWhite;
+        if (arduboy.pressed(UP_BUTTON)) { s_y--; }
+        if (arduboy.pressed(DOWN_BUTTON)) { s_y++; }
+        if (arduboy.pressed(LEFT_BUTTON)) { s_x--; }
+        if (arduboy.pressed(RIGHT_BUTTON)) { s_x++; }
+        if (arduboy.pressed(A_BUTTON)) { s_block = BlockIndex(uint8(s_block) - 1); }
+        if (arduboy.pressed(B_BUTTON)) { s_block = BlockIndex(uint8(s_block) + 1); }
+        
+        arduboy.fillRect(s_x - 1, s_y - 1, 5, 5, BLACK);
+        Sprites::drawExternalMask(s_x, s_y, BlockSprites, BlockSprites, uint8(s_block), uint8(BlockIndex::SolidWhite));
+      }
+      break;
   }
   if (s_frameNum < 255) {
     s_frameNum++;
@@ -710,189 +757,11 @@ void loop()
   arduboy.display();
 }
 
-constexpr uint8 ___ = 0x00;
-constexpr uint8 __O = 0x01;
-constexpr uint8 _O_ = 0x02;
-constexpr uint8 _OO = 0x03;
-constexpr uint8 O__ = 0x04;
-constexpr uint8 O_O = 0x05;
-constexpr uint8 OO_ = 0x06;
-constexpr uint8 OOO = 0x07;
-
 void TestSprite()
 {
-  static
-  const unsigned char PROGMEM PetrisBlocks[] =
+  for (uint8 i = 0; i < uint8(BlockIndex::Count); i++)
   {
-    // width, height,
-    3, 8,
-
-    // [0] : Solid Square
-    OOO,
-    OOO,
-    OOO,
-
-    // [1] : Square w/Hole
-    OOO,
-    O_O,
-    OOO,
-
-    // [2..11] Tron Square
-    OOO,  // North ->
-    __O,  // North cap
-    OOO,
-
-    O_O,
-    O_O,  // East cap
-    OOO,
-
-    OOO,
-    O__,  // South cap
-    OOO,
-
-    OOO,
-    O_O,  // West cap
-    O_O,
-
-    OOO,
-    __O,  // NW corner
-    O_O,
-
-    O_O,
-    __O,  // NE corner
-    OOO,
-
-    O_O,
-    O__,  // SE corner
-    OOO,
-
-    OOO,
-    O__,  // SW corner
-    O_O,
-
-    OOO,
-    ___,  // N-S block
-    OOO,
-
-    O_O,
-    O_O,  // E-W block
-    O_O,
-
-    // [12..17] Tron Angled
-    OO_,  // North ->
-    __O,  // North cap
-    OOO,
-
-    O_O,
-    O_O,  // East cap
-    _OO,
-
-    OOO,
-    O__,  // South cap
-    _OO,
-
-    OO_,
-    O_O,  // West cap
-    O_O,
-
-    OO_,
-    __O,  // NW corner
-    O_O,
-
-    // NE corner    // Duplicate of Tron Square : NE corner
-
-    O_O,
-    O__,  // SE corner
-    _OO,
-
-    // SW corner    // Duplicate of Tron Square : SW corner
-
-    // [18..27] Simple Dither
-    _O_,
-    O_O,  // 'o' dither
-    _O_,
-
-    O_O,
-    _O_,  // 'x' dither
-    O_O,
-
-    _OO,
-    O_O,  // North cap
-    _OO,
-
-    _O_,
-    O_O,  // East cap
-    OOO,
-
-    OO_,
-    O_O,  // South cap
-    OO_,
-
-    OOO,
-    O_O,  // West cap
-    _O_,
-
-    _OO,
-    O_O,  // NW corner
-    _O_,
-
-    _O_,
-    O_O,  // NE corner
-    _OO,
-
-    _O_,
-    O_O,  // SE corner
-    OO_,
-
-    OO_,
-    O_O,  // SW corner
-    _O_,
-
-    // [28..32] Rotation Aware Dither
-    OOO,
-    O_O,  // NW large cap
-    _OO,
-
-    // Unused
-    //_OO,
-    //O_O,  // NE large cap
-    //OOO,
-
-    // Unused
-    //OO_,
-    //O_O,  // SE large cap
-    //OOO,
-
-    OOO,
-    O_O,  // SW large cap
-    OO_,
-
-    // NW small cap    // Duplicate of Simple Dither : NW corner
-    // NE small cap    // Duplicate of Simple Dither : NE corner
-    // SE small cap    // Duplicate of Simple Dither : SE corner
-    // SW small cap    // Duplicate of Simple Dither : SW corner
-
-    OOO,
-    _OO,  // NW medium cap
-    O_O,
-
-    O_O,
-    _OO,  // NE medium cap
-    OOO,
-
-    // Unused
-    //O_O,
-    //OO_,  // SE medium cap
-    //OOO,
-
-    OOO,
-    OO_,  // SW medium cap
-    O_O,
-  };
-
-  for (uint8 i = 0; i < countof(PetrisBlocks) / 3; i++)
-  {
-    Sprites::drawOverwrite((i % 32) * 4, 28 + ((i / 32) * 9), PetrisBlocks, i);
+    Sprites::drawOverwrite((i % 25) * 5, 28 + ((i / 25) * 9), BlockSprites, i);
   }
 }
 
@@ -1116,23 +985,24 @@ void GameOverLoop()
 
 static void DrawBlock(uint8 x, uint8 y, BlockIndex block, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos)
 {
-  const uint8 left = leftAnchorScreenPos + (x * k_blockWidth);
-  const uint8 top = bottomAnchorScreenPos - (y * k_blockHeight);
-  if (block == 0)
+  DebugStack;
+  const uint8 xOffset = x * k_blockWidth;
+  const uint8 yOffset = y * k_blockHeight;
+  // If block is above the top of the screen, don't try to draw it
+  if (yOffset <= bottomAnchorScreenPos)
   {
-    arduboy.fillRect(left, top, k_blockWidth, k_blockHeight, BLACK);
-  }
-  else if (block == 1)
-  {
-    arduboy.drawRect(left, top, k_blockWidth, k_blockHeight, WHITE);
-    arduboy.drawPixel(left + 1, top + 1, BLACK);
-  }
-  else
-  {
-    // For now, this case is mostly for debugging if there's unexpected data in the grid.
-    // Eventually there will be a variety of block visuals
-    arduboy.drawRect(left, top, k_blockWidth, k_blockHeight, BLACK);
-    arduboy.drawPixel(left + 1, top + 1, WHITE);
+    const uint8 left = leftAnchorScreenPos + xOffset;
+    const uint8 top = bottomAnchorScreenPos - yOffset;
+  
+    // TODO: These asserts fail in debug! Fix them!
+    Assert(left < k_screenWidth);
+    Assert(top < k_screenHeight);
+  
+    // TODO: Figure out why this is necessary! Shouldn't drawExternalMask work?
+    arduboy.fillRect(left, top, 3, 3, BLACK);
+    
+    Assert(block >= BlockIndex::Empty && block < BlockIndex::Count);
+    Sprites::drawExternalMask(left, top, BlockSprites, BlockSprites, uint8(block), uint8(BlockIndex::SolidWhite));
   }
 }
 
@@ -1145,7 +1015,7 @@ void Grid::DebugPrint(const char* msg) const
   {
     for (uint8 x = 0; x < k_gridWidth; x++)
     {
-      Serial.print(Get(x, y));
+      Serial.print(uint8(Get(x, y)));
     }
     Serial.println();
   }
@@ -1155,6 +1025,7 @@ void Grid::DebugPrint(const char* msg) const
 
 void Grid::Draw() const
 {
+  DebugStack;
   // Draw border lines
   arduboy.drawLine(k_borderLeftPos, 0, k_borderLeftPos, k_borderBottomPos, WHITE);
   arduboy.drawLine(k_borderRightPos, 0, k_borderRightPos, k_borderBottomPos, WHITE);
@@ -1181,7 +1052,7 @@ void Grid::ProcessFullLines()
       BlockIndex block = Get(x, y);
       // Copy block to row below if any lines were cleared. Set is a no-op if numCleared is 0
       Set(x, y - numCleared, block);
-      if (block == 0)
+      if (block == BlockIndex::Empty)
       {
         lineFull = false;
       }
@@ -1197,7 +1068,7 @@ void Grid::ProcessFullLines()
   {
     for (uint8 x = 0; x < k_gridWidth; x++)
     {
-      Set(x, y, 0);
+      Set(x, y, BlockIndex::Empty);
     }
   }
 }
@@ -1265,6 +1136,7 @@ void PieceData::GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientat
 
 void PieceData::Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const
 {
+  DebugStack;
   uint8 dx;
   uint8 dy;
   for (uint8 i = 0; i < GetNumBlocksInPiece(); i++)
@@ -1312,8 +1184,7 @@ void CurrentPiece::Draw() const
 {
   if (m_pieceIndex != PieceIndex::Invalid)
   {
-    const BlockIndex blockIndex = 1;
-    GetPieceData().Draw(m_x, m_y, m_orientation, blockIndex, k_gridLeftPos, k_gridBottomPos);
+    GetPieceData().Draw(m_x, m_y, m_orientation, k_defaultBlockIndex, k_gridLeftPos, k_gridBottomPos);
   }
 }
 
@@ -1330,8 +1201,7 @@ void CurrentPiece::DrawShadow() const
     }
     if (shadowY != m_y)
     {
-      const BlockIndex shadowBlockIndex = 2;
-      pieceData.Draw(m_x, shadowY, m_orientation, shadowBlockIndex, k_gridLeftPos, k_gridBottomPos);
+      pieceData.Draw(m_x, shadowY, m_orientation, k_defaultShadowBlockIndex, k_gridLeftPos, k_gridBottomPos);
     }
   }
 }
@@ -1486,12 +1356,11 @@ PieceIndex CurrentPiece::TryHold()
     // NOTE: This only works if this code block is the only place m_holdPiece is modified during gameplay
     if (oldHoldPiece != PieceIndex::Invalid)
     {
-      const BlockIndex clearBlock = 0;
+      const BlockIndex clearBlock = BlockIndex::Empty;
       g_pieceData[uint8(oldHoldPiece)].Draw(0, 0, PieceOrientation::North, clearBlock, k_holdDisplayLeft, k_holdDisplayBottom);
     }
     Assert(m_holdPiece != PieceIndex::Invalid);
-    const BlockIndex nextBlock = 1;
-    g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, nextBlock, k_holdDisplayLeft, k_holdDisplayBottom);
+    g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, k_defaultBlockIndex, k_holdDisplayLeft, k_holdDisplayBottom);
 
     DebugPrintLine(F("Hold"));
   }
@@ -1527,7 +1396,7 @@ void CurrentPiece::LockPieceInGrid()
     uint8 blockOffsetX;
     uint8 blockOffsetY;
     pieceData.GetBlockOffsetForIndexAndRotation(blockIndex, m_orientation, blockOffsetX, blockOffsetY);
-    g_grid.Set(m_x + blockOffsetX, m_y + blockOffsetY, 1);
+    g_grid.Set(m_x + blockOffsetX, m_y + blockOffsetY, k_defaultBlockIndex);
   }
 
   // Invalidate the piece now that it's been written to the grid
@@ -1624,7 +1493,7 @@ PieceIndex Next::GetNextPiece()
 {
   // Hacky way to clear the previous "Next" display. First clear the old display, then draw the new one.
   // It's nice in that it only updates the display when something changes, but drawing in GetNextPiece feels dirty.
-  Draw(0);
+  Draw(BlockIndex::Empty);
   PieceIndex nextPiece = m_next[m_index];
   m_index++;
   // TODO: Make this magic number a constant or computed?
@@ -1640,7 +1509,7 @@ PieceIndex Next::GetNextPiece()
 #ifdef GAME_BUILD
   // Update the Next display in game builds
   // TODO: Figure out a nicer way to do this and not have drawing code in the middle of GetNextPiece
-  Draw(1);
+  Draw(k_defaultBlockIndex);
 #endif // #ifdef GAME_BUILD
   return nextPiece;
 }
