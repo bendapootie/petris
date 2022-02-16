@@ -1,14 +1,14 @@
 
-constexpr uint8_t ___ = 0x00;
-constexpr uint8_t __O = 0x01;
-constexpr uint8_t _O_ = 0x02;
-constexpr uint8_t _OO = 0x03;
-constexpr uint8_t O__ = 0x04;
-constexpr uint8_t O_O = 0x05;
-constexpr uint8_t OO_ = 0x06;
-constexpr uint8_t OOO = 0x07;
+constexpr uint8 ___ = 0x00;
+constexpr uint8 __O = 0x01;
+constexpr uint8 _O_ = 0x02;
+constexpr uint8 _OO = 0x03;
+constexpr uint8 O__ = 0x04;
+constexpr uint8 O_O = 0x05;
+constexpr uint8 OO_ = 0x06;
+constexpr uint8 OOO = 0x07;
 
-enum class BlockIndex : uint8_t
+enum class BlockIndex : uint8
 {
   Empty             = 0x00,   // Same as SolidBlack
   SolidBlack        = 0x00,
@@ -78,7 +78,7 @@ enum class BlockIndex : uint8_t
   Count
 };
 
-constexpr uint8_t PROGMEM BlockSprites[] =
+constexpr uint8 PROGMEM BlockSprites[] =
 {
   // width, height,
   3, 8,
