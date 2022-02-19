@@ -812,7 +812,12 @@ void Menus::Loop()
       if (input.WasButtonPressed(A_BUTTON) | input.WasButtonPressed(B_BUTTON))
       {
         // TODO: Clean this up! There needs to be a better way to manage this state
-        // Dirty workaround since m_startingLevel gets cleared in ResetGame()
+        // Dirty workaround since m_startingLevel and m_visualStyle get cleared in ResetGame()
+        for (uint8 i = 0; i < uint8(PieceIndex::Count); i++)
+        {
+          g_pieceStyle[i] = m_visualStyle;
+        }
+        
         uint8 startingLevel = m_startingLevel;
         ResetGame();
         g_gameMode.SetLevel(startingLevel);
