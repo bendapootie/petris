@@ -17,22 +17,24 @@ static_assert(int(VisualStyleType::Count) <= (1 << k_visualStyleTypeBits), "Visu
 
 enum class VisualStyle : uint8
 {
-  Solid,
+  SolidBlack,
+  SolidWhite,
   Donut,
   CenterDot,
   X,
   O,
   Plus,
   
-  Count
+  Count,
 };
 
-const char k_styleName0[] PROGMEM = "Solid";
-const char k_styleName1[] PROGMEM = "Donut";
-const char k_styleName2[] PROGMEM = "Dot";
-const char k_styleName3[] PROGMEM = "X";
-const char k_styleName4[] PROGMEM = "O";
-const char k_styleName5[] PROGMEM = "Plus";
+const char k_styleName0[] PROGMEM = "SolidBlack";
+const char k_styleName1[] PROGMEM = "SolidWhite";
+const char k_styleName2[] PROGMEM = "Donut";
+const char k_styleName3[] PROGMEM = "Dot";
+const char k_styleName4[] PROGMEM = "X";
+const char k_styleName5[] PROGMEM = "O";
+const char k_styleName6[] PROGMEM = "Plus";
 
 // For accessing an array of strings in program memory, see...
 // http://www.nongnu.org/avr-libc/user-manual/pgmspace.html
@@ -44,6 +46,7 @@ PGM_P const k_styleNames[] PROGMEM =
   k_styleName3,
   k_styleName4,
   k_styleName5,
+  k_styleName6,
 };
 static_assert(countof(k_styleNames) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
@@ -57,7 +60,19 @@ constexpr uint8 MakeSolidVisualStyle(VisualStyleType type, BlockIndex block)
   return uint8(type) | (uint8(block) << k_visualStyleTypeBits);
 }
 
-constexpr uint8 PROGMEM StyleDataSolid[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidWhite)};
+// Unpacks values that were packed in MakeSolidVisualStyle
+// 'outSolidBlockIndex' will only have valid data in it if VisualStyleType is SolidBlock
+VisualStyleType GetVisualStyleTypeFromFirstByte(uint8 firstByte, BlockIndex& outSolidBlockIndex)
+{
+  // Sign-extention shouldn't happen here since firstByte is an unsigned value
+  outSolidBlockIndex = BlockIndex(firstByte >> k_visualStyleTypeBits);
+  VisualStyleType type = VisualStyleType(firstByte & k_visualStyleTypeMask);
+  return type;
+}
+
+
+constexpr uint8 PROGMEM StyleDataSolidBlack[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidBlack)};
+constexpr uint8 PROGMEM StyleDataSolidWhite[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidWhite)};
 constexpr uint8 PROGMEM StyleDataDonut[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::Donut)};
 constexpr uint8 PROGMEM StyleDataCenterDot[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::CenterDot)};
 constexpr uint8 PROGMEM StyleDataX[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::X)};
@@ -66,7 +81,8 @@ constexpr uint8 PROGMEM StyleDataPlus[] = {MakeSolidVisualStyle(VisualStyleType:
 
 constexpr const uint8* k_visualStyles[] PROGMEM =
 {
-  StyleDataSolid,
+  StyleDataSolidBlack,
+  StyleDataSolidWhite,
   StyleDataDonut,
   StyleDataCenterDot,
   StyleDataX,
@@ -75,78 +91,33 @@ constexpr const uint8* k_visualStyles[] PROGMEM =
 };
 static_assert(countof(k_visualStyles) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
-/*
-enum class BlockIndex : uint8
+class VisualStyleHelper
 {
-  Empty             = 0x00,   // Same as SolidBlack
-  SolidBlack        = 0x00,
-  SolidWhite        = 0x01,
-  Donut             = 0x02,
-  CenterDot         = 0x03,
-  X                 = 0x04,
-  O                 = 0x05,
-  Plus              = 0x06,
-  Corners           = 0x07,
-  
-  TronSquareCapN    = 0x08,
-  TronSquareCapE    = 0x09,
-  TronSquareCapS    = 0x0A,
-  TronSquareCapW    = 0x0B,
-  
-  TronSquareCornerNW = 0x0C,
-  TronSquareCornerNE = 0x0D,
-  TronSquareCornerSE = 0x0E,
-  TronSquareCornerSW = 0x0F,
-  
-  TronSquareNS      = 0x10,
-  TronSquareEW      = 0x11,
-  TronSquareSN      = 0x12,
-  TronSquareWE      = 0x13,
-  
-  TronSquareTN      = 0x14,
-  TronSquareTE      = 0x15,
-  TronSquareTS      = 0x16,
-  TronSquareTW      = 0x17,
-  
-  TronAngledCapN    = 0x18,
-  TronAngledCapE    = 0x19,
-  TronAngledCapS    = 0x1A,
-  TronAngledCapW    = 0x1B,
-  
-  TronAngledCornerNW = 0x1C,
-  TronAngledCornerNE = 0x1D,
-  TronAngledCornerSE = 0x1E,
-  TronAngledCornerSW = 0x1F,
-  
-  SimpleDitherCapN   = 0x20,
-  SimpleDitherCapE   = 0x21,
-  SimpleDitherCapS   = 0x22,
-  SimpleDitherCapW   = 0x23,
-  
-  SimpleDitherCornerNW = 0x24,
-  SimpleDitherCornerNE = 0x25,
-  SimpleDitherCornerSE = 0x26,
-  SimpleDitherCornerSW = 0x27,
+public:
+  VisualStyleHelper(VisualStyle visualStyle) : m_visualStyle(visualStyle) {}
 
-  ShadedDitherLargeCapNW = 0x28,
-  ShadedDitherLargeCapNE = 0x29, // Unused
-  ShadedDitherLargeCapSE = 0x2A, // Unused
-  ShadedDitherLargeCapSW = 0x2B,
+  BlockIndex GetBlockForPiece(PieceIndex pieceIndex, PieceOrientation orientation, uint8 index) const;
   
-  ShadedDitherSmallCapNW = SimpleDitherCornerNW,
-  ShadedDitherSmallCapNE = SimpleDitherCornerNE,
-  ShadedDitherSmallCapSE = SimpleDitherCornerSE,
-  ShadedDitherSmallCapSW = SimpleDitherCornerSW,
-
-  ShadedDitherMediumCapNW = 0x2C,
-  ShadedDitherMediumCapNE = 0x2D,
-  ShadedDitherMediumCapSE = 0x2E, // Unused
-  ShadedDitherMediumCapSW = 0x2F,
-
-  Count
+private:
+  VisualStyle m_visualStyle;
 };
 
-constexpr uint8 PROGMEM BlockSprites[] =
+BlockIndex VisualStyleHelper::GetBlockForPiece(PieceIndex pieceIndex, PieceOrientation orientation, uint8 index) const
 {
-};
-*/
+  uint8* pgm_styleData = pgm_read_word(&k_visualStyles[uint8(m_visualStyle)]);
+  uint8 firstByte = pgm_read_byte(&pgm_styleData[0]);
+
+  BlockIndex blockIndex;
+  VisualStyleType styleType = GetVisualStyleTypeFromFirstByte(firstByte, blockIndex);
+
+  if (styleType == VisualStyleType::SolidBlock)
+  {
+    // nothing else to do; blockIndex was already set by call to GetVisualStyleTypeFromFirstByte
+  }
+  else
+  {
+    Assert(false, F("VisualStyleType not implemented!"));
+  }
+  
+  return blockIndex;
+}

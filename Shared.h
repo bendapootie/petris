@@ -4,10 +4,6 @@
 //==========================================================================
 // Build configuration
 //--------------------------------------------------------------------------
-// Only one of these is allowed to be defined at a time
-//#define CONFIGURATION_TEST
-//#define CONFIGURATION_DEBUG
-#define CONFIGURATION_RELEASE
 
 // TEST - runs unit tests instead of the game
 #if defined CONFIGURATION_TEST

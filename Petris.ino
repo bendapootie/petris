@@ -1,82 +1,20 @@
 #include <Arduboy2.h>
 
+// Only one of these is allowed to be defined at a time
+//#define CONFIGURATION_TEST
+//#define CONFIGURATION_DEBUG
+#define CONFIGURATION_RELEASE
+
 #include "Shared.h"
+#include "Petris_Debugging.h"
+
+enum class PieceIndex : uint8;
+enum class PieceOrientation : uint8;
+
 #include "Sprites.h"
 #include "VisualStyles.h"
 
 
-// Define DEBUGGING_ENABLED to enable Asserts, Serial port output, and extra debugging
-// Note: If this is defined before the types, I get compiler errors?!?
-#ifdef DEBUGGING_ENABLED
-  // TODO: Figure out how to use __FlashStringHelper* string here to avoid eating up dynamic memory
-  static const char* s_stackTrace[10];
-  static short s_stackTraceLine[10];
-  static uint8 s_stackDepth = 0;
-  class DebugStackTracker
-  {
-  public:
-    DebugStackTracker(const char* func, short line)
-    {
-      s_stackTrace[s_stackDepth] = func;
-      s_stackTraceLine[s_stackDepth] = line;
-      s_stackDepth++;
-    }
-    ~DebugStackTracker()
-    {
-      s_stackDepth--;
-    }
-
-    static void PrintStack();
-  private:
-  };
-  // static
-  void DebugStackTracker::PrintStack()
-  {
-    for (uint8 i = 0; i < s_stackDepth; i++)
-    {
-      if (i != 0)
-      {
-        Serial.print(" - ");
-      }
-      Serial.print(s_stackTrace[i]);
-      Serial.print("(");
-      Serial.print(s_stackTraceLine[i]);
-      Serial.print(")");
-    }
-  }
-
-
-  // Instrumentation for getting at least partial stack traces from failed asserts
-  // Usage: Sprinkle these around at the top of functions to get better data from asserts
-  #define DebugStack DebugStackTracker __debugStackTracker(__FUNCTION__, __LINE__)
-
-
-  char g_debugStr[80];
-  void DebugPrint(const __FlashStringHelper* msg) { Serial.print(msg); }
-  void DebugPrintLine(const __FlashStringHelper* msg) { Serial.println(msg); }
-  void __AssertFunction(const char* func, int line, bool condition, const __FlashStringHelper* msg = nullptr)
-  {
-    if (!condition)
-    {
-      Serial.print(F("Assert Failed! "));
-      Serial.print(func);
-      Serial.print(F("("));
-      Serial.print(line);
-      Serial.print(F(") - "));
-      Serial.println(msg == nullptr ? F("") : msg);
-      Serial.print(F("Stack: "));
-      DebugStackTracker::PrintStack();
-      Serial.println();
-    }
-  }
-  #define Assert(condition, ...) __AssertFunction(__FUNCTION__, __LINE__, (condition), ##__VA_ARGS__)
-
-#else // #ifdef DEBUGGING_ENABLED
-  void DebugPrint(...) {}
-  void DebugPrintLine(...) {}
-  #define Assert(condition, ...) {}
-  #define DebugStack {}
-#endif // #else // #ifdef DEBUGGING_ENABLED
 
 
 // Feature flags for debugging
@@ -121,10 +59,6 @@ constexpr uint8 k_softDropSpeedScalar = 20;  // TODO: Reevaluate how soft drop s
 constexpr GameTicks k_defaultLockDownDelay = SecondsToGameTicks(0.5f);
 // How many moves the player can make before the piece is locked down
 constexpr uint8 k_defaultLockDownMoveCount = 15;
-
-// TODO: This is temporary until variety and customization is implemented
-constexpr BlockIndex k_defaultBlockIndex = BlockIndex::Plus;//Donut;
-constexpr BlockIndex k_defaultShadowBlockIndex = BlockIndex::CenterDot;
 
 // Guideline: ~0.3s before auto-repeat kicks in. 72 ticks = 0.3s. This likely wants to be an integer multiple of k_gameTicksPerFrame.
 constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
@@ -314,7 +248,7 @@ public:
   }
 
   // The number of blocks per piece is hard-coded, but the API shouldn't care
-  constexpr uint8 GetNumBlocksInPiece() { return 4; }
+  static constexpr uint8 GetNumBlocksInPiece() { return 4; }
 
   // orientation : Orientation of the piece to check (North is default)
   // pieceX, pieceY : (x, y) grid position of piece origin to check
@@ -334,7 +268,18 @@ public:
   // Returns the RotationOffsets data associated with this PieceData. It will be null if there aren't alternate rotations for the piece.
   const RotationOffsets* GetRotationOffsets() const { return m_rotationOffsets; }
 
-  void Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const;
+  void Draw(
+    uint8 x,
+    uint8 y,
+    PieceOrientation orientation,
+    VisualStyle visualStyle,
+    PieceIndex pieceIndex,
+    uint8 leftAnchorScreenPos,
+    uint8 bottomAnchorScreenPos
+  ) const;
+
+private:
+  BlockIndex GetBlockForPieceFromVisualStyle(VisualStyle visualStyle, PieceIndex pieceIndex, PieceOrientation orientation, uint8 index) const;
 
 private:
   // Data that describes alternative rotation offsets for the piece.
@@ -415,7 +360,7 @@ public:
 
   void Reset();
   PieceIndex GetNextPiece();
-  void Draw(BlockIndex blockIndex) const;
+  void Draw(bool setFalseToClear = true) const;
 
 private:
   void ShuffleBag(uint8 startingIndex);
@@ -462,6 +407,7 @@ public:
   {
     m_selectedIndex = 0;
     m_startingLevel = 0;
+    m_visualStyle = VisualStyle::Donut;
   }
 
   void Loop();
@@ -470,6 +416,7 @@ public:
 private:
   uint8 m_selectedIndex;
   uint8 m_startingLevel;
+  VisualStyle m_visualStyle;
 };
 
 class Input
@@ -506,8 +453,20 @@ private:
   Input m_input;
 };
 
-// TODO: Move this out of dynamic memory
-const char* k_menuItems[] = {"Play", "Mode", "Level", "Skin", "Shadow"};
+const char k_menuItem1[] PROGMEM = "Play";
+const char k_menuItem2[] PROGMEM = "Mode";
+const char k_menuItem3[] PROGMEM = "Level";
+const char k_menuItem4[] PROGMEM = "Skin";
+const char k_menuItem5[] PROGMEM = "Shadow";
+
+PGM_P const k_menuItems[] PROGMEM =
+{
+  k_menuItem1,
+  k_menuItem2,
+  k_menuItem3,
+  k_menuItem4,
+  k_menuItem5,
+};
 
 
 //==========================================================================
@@ -596,6 +555,25 @@ class PieceData g_pieceData[] = {
 };
 static_assert(countof(g_pieceData) == uint8(PieceIndex::Count));
 
+// These values can change based on the skin and/or user preference, so they need to be in dynamic memory
+VisualStyle g_pieceStyle[] =
+{
+  VisualStyle::X,        // O - Piece
+  VisualStyle::Donut,    // I - Piece
+  VisualStyle::X,        // T - Piece
+  VisualStyle::Plus,     // L - Piece
+  VisualStyle::O,        // J - Piece
+  VisualStyle::Plus,     // S - Piece
+  VisualStyle::O         // Z - Piece
+};
+static_assert(countof(g_pieceStyle) == uint8(PieceIndex::Count));
+
+VisualStyle GetVisualStyleFromPiece(const PieceIndex piece)
+{
+  Assert(piece < PieceIndex::Count);
+  return g_pieceStyle[uint8(piece)];
+}
+
 //--------------------------------------------------------------------------
 // Global variables
 //==========================================================================
@@ -674,6 +652,7 @@ void loop()
     case 1: RunTest(Next::UnitTest); break;
     case 2: RunTest(TestFailure); break;
     case 3: RunTest(TestSprite); break;
+    case 4: RunTest(TestVisualStyles); break;
     default:
       {
         static uint8 s_x = k_screenWidth / 2;
@@ -703,6 +682,29 @@ void TestSprite()
   for (uint8 i = 0; i < uint8(BlockIndex::Count); i++)
   {
     Sprites::drawOverwrite((i % 25) * 5, 28 + ((i / 25) * 9), BlockSprites, i);
+  }
+}
+
+void TestVisualStyles()
+{
+  VisualStyle styles[] = {VisualStyle::Donut, VisualStyle::Plus};
+  BlockIndex targetBlocks[] = {BlockIndex::Donut, BlockIndex::Plus};
+
+  for (int i = 0; i < countof(styles); i++)
+  {
+    VisualStyleHelper styleHelper(styles[i]);
+  
+    for (uint8 piece = 0; piece < uint8(PieceIndex::Count); piece++)
+    {
+      for (uint8 orientation = 0; orientation < uint8(PieceOrientation::Count); orientation++)
+      {
+        for (int8 index = 0; index < PieceData::GetNumBlocksInPiece(); index++)
+        {
+          BlockIndex blockIndex = styleHelper.GetBlockForPiece(PieceIndex(piece), PieceOrientation(orientation), index);
+          TestVerify(blockIndex == targetBlocks[i]);
+        }
+      }
+    }
   }
 }
 
@@ -801,6 +803,9 @@ void Menus::Loop()
   ProcessInput();
 
   const Input& input = g.GetInput();
+  const bool goForward = (input.WasButtonPressed(B_BUTTON) || input.WasButtonPressed(RIGHT_BUTTON));
+  const bool goBack = (input.WasButtonPressed(A_BUTTON) || input.WasButtonPressed(LEFT_BUTTON));
+  
   switch (m_selectedIndex)
   {
     case 0: // "Play"
@@ -814,20 +819,25 @@ void Menus::Loop()
         g_gameState = GameState::Playing;
       }
       break;
+      
     case 1: // "Mode"
       break;
+      
     case 2: // "Level"
-      if ((m_startingLevel < k_maxStartingLevel) && (input.WasButtonPressed(B_BUTTON) || input.WasButtonPressed(RIGHT_BUTTON)))
+      if ((m_startingLevel < k_maxStartingLevel) && goForward)
       {
         m_startingLevel++;
       }
-      if ((m_startingLevel > 0) && (input.WasButtonPressed(A_BUTTON) || input.WasButtonPressed(LEFT_BUTTON)))
+      if ((m_startingLevel > 0) && goBack)
       {
         m_startingLevel--;
       }
       break;
+      
     case 3: // "Skin"
+      m_visualStyle = VisualStyle(((uint8(m_visualStyle) + uint8(VisualStyle::Count) + goForward - goBack)) % uint8(VisualStyle::Count));
       break;
+      
     case 4: // "Shadow"
       break;
   }
@@ -843,13 +853,24 @@ void Menus::Loop()
   for (uint8 i = 0; i < countof(k_menuItems); i++)
   {
     arduboy.print(m_selectedIndex == i ? F("> ") : F("   "));
-    arduboy.print(k_menuItems[i]);
+    arduboy.print((__FlashStringHelper*)pgm_read_word(&(k_menuItems[i])));
     switch (i)
     {
-      case 2:
+      case 0: // Play
+        break;
+      case 1: // Mode
+        break;
+      case 2: // Level
         arduboy.print(F(" ["));
         arduboy.print(m_startingLevel);
         arduboy.print(F("]"));
+        break;
+      case 3: // Skin
+        arduboy.print(F(" ["));
+        arduboy.print((__FlashStringHelper*)pgm_read_word(&(k_styleNames[uint8(m_visualStyle)])));
+        arduboy.print(F("]"));
+        break;
+      case 4: // Shadow
         break;
     }
     arduboy.println();
@@ -1075,14 +1096,18 @@ void PieceData::GetBlockOffsetForIndexAndRotation(int8 blockIndex, PieceOrientat
   }
 }
 
-void PieceData::Draw(uint8 x, uint8 y, PieceOrientation orientation, BlockIndex blockIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const
+// TODO: Figure out how to not pass PieceIndex into the PieceData. Either PieceData should
+//       already know that (or be able to figure it out), or it shouldn't need to know it.
+void PieceData::Draw(uint8 x, uint8 y, PieceOrientation orientation, VisualStyle visualStyle, PieceIndex pieceIndex, uint8 leftAnchorScreenPos, uint8 bottomAnchorScreenPos) const
 {
   DebugStack;
-  uint8 dx;
-  uint8 dy;
+  VisualStyleHelper styleHelper(visualStyle);
   for (uint8 i = 0; i < GetNumBlocksInPiece(); i++)
   {
+    uint8 dx;
+    uint8 dy;
     GetBlockOffsetForIndexAndRotation(i, orientation, dx, dy);
+    const BlockIndex blockIndex = styleHelper.GetBlockForPiece(pieceIndex, orientation, i);
     DrawBlock(x + dx, y + dy, blockIndex, leftAnchorScreenPos, bottomAnchorScreenPos);
   }
 }
@@ -1125,7 +1150,8 @@ void CurrentPiece::Draw() const
 {
   if (m_pieceIndex != PieceIndex::Invalid)
   {
-    GetPieceData().Draw(m_x, m_y, m_orientation, k_defaultBlockIndex, k_gridLeftPos, k_gridBottomPos);
+    const VisualStyle visualStyle = GetVisualStyleFromPiece(m_pieceIndex);
+    GetPieceData().Draw(m_x, m_y, m_orientation, visualStyle, m_pieceIndex, k_gridLeftPos, k_gridBottomPos);
   }
 }
 
@@ -1142,7 +1168,8 @@ void CurrentPiece::DrawShadow() const
     }
     if (shadowY != m_y)
     {
-      pieceData.Draw(m_x, shadowY, m_orientation, k_defaultShadowBlockIndex, k_gridLeftPos, k_gridBottomPos);
+      const VisualStyle visualStyle = VisualStyle::CenterDot;
+      pieceData.Draw(m_x, shadowY, m_orientation, visualStyle, m_pieceIndex, k_gridLeftPos, k_gridBottomPos);
     }
   }
 }
@@ -1297,11 +1324,13 @@ PieceIndex CurrentPiece::TryHold()
     // NOTE: This only works if this code block is the only place m_holdPiece is modified during gameplay
     if (oldHoldPiece != PieceIndex::Invalid)
     {
-      const BlockIndex clearBlock = BlockIndex::Empty;
-      g_pieceData[uint8(oldHoldPiece)].Draw(0, 0, PieceOrientation::North, clearBlock, k_holdDisplayLeft, k_holdDisplayBottom);
+      // Special-case this to hide the previous piece
+      const VisualStyle visualStyle = VisualStyle::SolidBlack;
+      g_pieceData[uint8(oldHoldPiece)].Draw(0, 0, PieceOrientation::North, visualStyle, oldHoldPiece, k_holdDisplayLeft, k_holdDisplayBottom);
     }
     Assert(m_holdPiece != PieceIndex::Invalid);
-    g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, k_defaultBlockIndex, k_holdDisplayLeft, k_holdDisplayBottom);
+    const VisualStyle visualStyle = GetVisualStyleFromPiece(m_holdPiece);
+    g_pieceData[uint8(m_holdPiece)].Draw(0, 0, PieceOrientation::North, visualStyle, m_holdPiece, k_holdDisplayLeft, k_holdDisplayBottom);
 
     DebugPrintLine(F("Hold"));
   }
@@ -1331,13 +1360,15 @@ void CurrentPiece::DecrementMoveLockDownCounter(uint8 moveAndRotationCount)
 void CurrentPiece::LockPieceInGrid()
 {
   // Write all the blocks to the grid
+  VisualStyleHelper styleHelper(GetVisualStyleFromPiece(m_pieceIndex));
   const PieceData& pieceData = GetPieceData();
-  for (uint8 blockIndex = 0; blockIndex < pieceData.GetNumBlocksInPiece(); blockIndex++)
+  for (uint8 index = 0; index < pieceData.GetNumBlocksInPiece(); index++)
   {
     uint8 blockOffsetX;
     uint8 blockOffsetY;
-    pieceData.GetBlockOffsetForIndexAndRotation(blockIndex, m_orientation, blockOffsetX, blockOffsetY);
-    g_grid.Set(m_x + blockOffsetX, m_y + blockOffsetY, k_defaultBlockIndex);
+    pieceData.GetBlockOffsetForIndexAndRotation(index, m_orientation, blockOffsetX, blockOffsetY);
+    const BlockIndex blockIndex = styleHelper.GetBlockForPiece(m_pieceIndex, m_orientation, index);
+    g_grid.Set(m_x + blockOffsetX, m_y + blockOffsetY, blockIndex);
   }
 
   // Invalidate the piece now that it's been written to the grid
@@ -1434,7 +1465,7 @@ PieceIndex Next::GetNextPiece()
 {
   // Hacky way to clear the previous "Next" display. First clear the old display, then draw the new one.
   // It's nice in that it only updates the display when something changes, but drawing in GetNextPiece feels dirty.
-  Draw(BlockIndex::Empty);
+  Draw(false);  // Note: Passing 'false' in here will draw black over all the pieces
   PieceIndex nextPiece = m_next[m_index];
   m_index++;
   // TODO: Make this magic number a constant or computed?
@@ -1450,19 +1481,21 @@ PieceIndex Next::GetNextPiece()
 #ifdef GAME_BUILD
   // Update the Next display in game builds
   // TODO: Figure out a nicer way to do this and not have drawing code in the middle of GetNextPiece
-  Draw(k_defaultBlockIndex);
+  Draw();
 #endif // #ifdef GAME_BUILD
   return nextPiece;
 }
 
-void Next::Draw(BlockIndex blockIndex) const
+void Next::Draw(bool setFalseToClear) const
 {
   for (uint8 i = 0; i < k_numNextPiecesToShow; i++)
   {
-    const PieceData& pieceData = g_pieceData[uint8(m_next[m_index + i])];
+    const PieceIndex pieceIndex = m_next[m_index + i];
+    const PieceData& pieceData = g_pieceData[uint8(pieceIndex)];
     // TODO: What block index should be used for the Next display?
     // TODO: Formalize the position of these draws
-    pieceData.Draw(0, (1 + k_numNextPiecesToShow - i) * 3, PieceOrientation::North, blockIndex, k_nextDisplayLeftPos, k_nextDisplayBottomPos);
+    VisualStyle visualStyle = setFalseToClear ? GetVisualStyleFromPiece(pieceIndex) : VisualStyle::SolidBlack;
+    pieceData.Draw(0, (1 + k_numNextPiecesToShow - i) * 3, PieceOrientation::North, visualStyle, pieceIndex, k_nextDisplayLeftPos, k_nextDisplayBottomPos);
   }
 }
 
