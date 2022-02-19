@@ -407,7 +407,6 @@ public:
   {
     m_selectedIndex = 0;
     m_startingLevel = 0;
-    m_visualStyle = VisualStyle::Donut;
   }
 
   void Loop();
@@ -416,7 +415,8 @@ public:
 private:
   uint8 m_selectedIndex;
   uint8 m_startingLevel;
-  VisualStyle m_visualStyle;
+  VisualStyle m_visualStyle = VisualStyle::Donut;
+  VisualStyle m_shadowStyle = VisualStyle::CenterDot;
 };
 
 class Input
@@ -568,6 +568,8 @@ VisualStyle g_pieceStyle[] =
 };
 static_assert(countof(g_pieceStyle) == uint8(PieceIndex::Count));
 
+VisualStyle g_shadowStyle = VisualStyle::CenterDot;
+
 VisualStyle GetVisualStyleFromPiece(const PieceIndex piece)
 {
   Assert(piece < PieceIndex::Count);
@@ -604,6 +606,13 @@ void loop()
 
   g.Loop();
 
+/* //Uncomment to display cpu load % on screen
+  arduboy.setCursor(0, 0);
+  int load = arduboy.cpuLoad();
+  if (load < 10) { load = 10; }
+  if (load > 99) { load = 99; }
+  arduboy.print(load);
+*/
   arduboy.display();
 }
 
@@ -817,6 +826,7 @@ void Menus::Loop()
         {
           g_pieceStyle[i] = m_visualStyle;
         }
+        g_shadowStyle = m_shadowStyle;
         
         uint8 startingLevel = m_startingLevel;
         ResetGame();
@@ -844,6 +854,7 @@ void Menus::Loop()
       break;
       
     case 4: // "Shadow"
+      m_shadowStyle = VisualStyle(((uint8(m_shadowStyle) + uint8(VisualStyle::Count) + goForward - goBack)) % uint8(VisualStyle::Count));
       break;
   }
 
@@ -876,6 +887,9 @@ void Menus::Loop()
         arduboy.print(F("]"));
         break;
       case 4: // Shadow
+        arduboy.print(F(" ["));
+        arduboy.print((__FlashStringHelper*)pgm_read_word(&(k_styleNames[uint8(m_shadowStyle)])));
+        arduboy.print(F("]"));
         break;
     }
     arduboy.println();
@@ -1173,8 +1187,7 @@ void CurrentPiece::DrawShadow() const
     }
     if (shadowY != m_y)
     {
-      const VisualStyle visualStyle = VisualStyle::CenterDot;
-      pieceData.Draw(m_x, shadowY, m_orientation, visualStyle, m_pieceIndex, k_gridLeftPos, k_gridBottomPos);
+      pieceData.Draw(m_x, shadowY, m_orientation, g_shadowStyle, m_pieceIndex, k_gridLeftPos, k_gridBottomPos);
     }
   }
 }
