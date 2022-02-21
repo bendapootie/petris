@@ -8,8 +8,31 @@
 #include "Shared.h"
 #include "Petris_Debugging.h"
 
-enum class PieceIndex : uint8;
-enum class PieceOrientation : uint8;
+// Type-safe enum for tracking Tetrimino indices
+// Note: There are 7 options, so even with an extra entry for "None", this could be stored in 3-bits
+enum class PieceIndex : uint8
+{
+  O,
+  I,
+  T,
+  L,
+  J,
+  S,
+  Z,
+  Count,
+  Invalid = Count
+};
+
+// Enum of piece orientation. North (0) is default. The rest are ordered clockwise.
+enum class PieceOrientation : uint8
+{
+  North,
+  East,
+  South,
+  West,
+  Count
+};
+
 
 #include "Sprites.h"
 #include "VisualStyles.h"
@@ -99,21 +122,6 @@ constexpr uint8 k_holdDisplayBottom = 3 * k_blockHeight;
 
 constexpr uint8 k_maxStartingLevel = 19;
 
-// Type-safe enum for tracking Tetrimino indices
-// Note: There are 7 options, so even with an extra entry for "None", this could be stored in 3-bits
-enum class PieceIndex : uint8
-{
-  O,
-  I,
-  T,
-  L,
-  J,
-  S,
-  Z,
-  Count,
-  Invalid = Count
-};
-
 enum class GameState : uint8
 {
   MainMenu,
@@ -125,16 +133,6 @@ enum class GameOverReason : uint8
 {
   None,     // The game isn't over
   BlockOut, // A piece overlapped with a block on the grid immediately when spawned
-};
-
-// Enum of piece orientation. North (0) is default. The rest are ordered clockwise.
-enum class PieceOrientation : uint8
-{
-  North,
-  East,
-  South,
-  West,
-  Count
 };
 
 enum class RotationDirection : uint8
