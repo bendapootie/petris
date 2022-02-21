@@ -26,6 +26,7 @@ enum class VisualStyle : uint8
   Plus,
   TronSquare,
   TronAngled,
+  SimpleDither,
 
   Count,
 };
@@ -39,6 +40,7 @@ const char k_styleName5[] PROGMEM = "O";
 const char k_styleName6[] PROGMEM = "Plus";
 const char k_styleName7[] PROGMEM = "TronSquare";
 const char k_styleName8[] PROGMEM = "TronAngled";
+const char k_styleName9[] PROGMEM = "SimpleDither";
 
 // For accessing an array of strings in program memory, see...
 // http://www.nongnu.org/avr-libc/user-manual/pgmspace.html
@@ -53,6 +55,7 @@ PGM_P const k_styleNames[] PROGMEM =
   k_styleName6,
   k_styleName7,
   k_styleName8,
+  k_styleName9,
 };
 static_assert(countof(k_styleNames) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
@@ -79,6 +82,10 @@ VisualStyleType GetVisualStyleTypeFromFirstByte(uint8 firstByte, BlockIndex& out
 constexpr const uint8 k_perBlockStyleDataOffset = 1;  // Offset in bytes of style data (first byte is header)
 constexpr const uint8 k_perBlockStyleStride = 4;      // How many bytes are used per piece
 constexpr const uint8 k_perBlockStyleTotalSize = k_perBlockStyleDataOffset + (k_perBlockStyleStride * uint8(PieceIndex::Count));
+
+constexpr const uint8 k_perBlockAndOrientationStyleDataOffset = 1;  // Offset in bytes of style data (first byte is header)
+constexpr const uint8 k_perBlockAndOrientationStride = 4 * uint8(PieceOrientation::Count);      // How many bytes are used per piece
+constexpr const uint8 k_perBlockAndOrientationStyleTotalSize = k_perBlockAndOrientationStyleDataOffset + (k_perBlockAndOrientationStride * uint8(PieceIndex::Count));
 
 constexpr uint8 PROGMEM StyleDataSolidBlack[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidBlack)};
 constexpr uint8 PROGMEM StyleDataSolidWhite[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidWhite)};
@@ -116,6 +123,53 @@ constexpr uint8 PROGMEM k_styleDataTronAngled[] =
 };
 static_assert(countof(k_styleDataTronAngled) == k_perBlockStyleTotalSize);
 
+constexpr uint8 PROGMEM k_styleDataSimpleDither[] =
+{
+  uint8(VisualStyleType::PerOrientationAndBlock),
+  // Piece order - O, I, T, L, J, S, Z,
+  // O-Block
+  uint8(BlockIndex::SimpleDitherCornerSW), uint8(BlockIndex::X), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerNE),
+  uint8(BlockIndex::SimpleDitherCornerNW), uint8(BlockIndex::X), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerSE),
+  uint8(BlockIndex::SimpleDitherCornerNE), uint8(BlockIndex::X), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerSW),
+  uint8(BlockIndex::SimpleDitherCornerSE), uint8(BlockIndex::X), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerNW),
+
+  // I-Block
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapE),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapS),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapW),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapN),
+
+  // T-Block
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::X),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::X),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::X),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::X),
+
+  // L-Block
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapN),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapE),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapS),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapW),
+
+  // J-Block
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapN),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapE),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapS),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapW),
+
+  // S-Block
+  uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerSE), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapE),
+  uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerSW), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapS),
+  uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerNW), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapW),
+  uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCornerNE), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapN),
+
+  // Z-Block
+  uint8(BlockIndex::SimpleDitherCornerSW), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapW), uint8(BlockIndex::X),
+  uint8(BlockIndex::SimpleDitherCornerNW), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapN), uint8(BlockIndex::X),
+  uint8(BlockIndex::SimpleDitherCornerNE), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapE), uint8(BlockIndex::X),
+  uint8(BlockIndex::SimpleDitherCornerSE), uint8(BlockIndex::X), uint8(BlockIndex::SimpleDitherCapS), uint8(BlockIndex::X),
+};
+static_assert(countof(k_styleDataSimpleDither) == k_perBlockAndOrientationStyleTotalSize);
 
 
 constexpr const uint8* k_visualStyles[] PROGMEM =
@@ -128,7 +182,8 @@ constexpr const uint8* k_visualStyles[] PROGMEM =
   StyleDataO,
   StyleDataPlus,
   k_styleDataTronSquare,
-  k_styleDataTronAngled
+  k_styleDataTronAngled,
+  k_styleDataSimpleDither
 };
 static_assert(countof(k_visualStyles) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
@@ -160,7 +215,7 @@ BlockIndex VisualStyleHelper::GetBlockForPiece(PieceIndex pieceIndex, PieceOrien
 
     case VisualStyleType::PerBlockWithRotation:
     {
-      uint8 offsetIntoStyleData = k_perBlockStyleDataOffset + (k_perBlockStyleStride * uint8(pieceIndex)) + index;
+      const uint8 offsetIntoStyleData = k_perBlockStyleDataOffset + (k_perBlockStyleStride * uint8(pieceIndex)) + index;
       blockIndex = BlockIndex(pgm_read_byte(&pgm_styleData[offsetIntoStyleData]));
       // Take piece orientationinto account
       static_assert(uint8(PieceOrientation::Count) == 4, "Rotation code here, and data format expects there to be 4 orientations");
@@ -169,6 +224,16 @@ BlockIndex VisualStyleHelper::GetBlockForPiece(PieceIndex pieceIndex, PieceOrien
       break;
     }
 
+    case VisualStyleType::PerOrientationAndBlock:
+    {
+      const uint8 offsetIntoStyleData =
+        k_perBlockAndOrientationStyleDataOffset
+        + (k_perBlockAndOrientationStride * uint8(pieceIndex))
+        + (k_perBlockStyleStride * uint8(orientation))
+        + index;
+        blockIndex = BlockIndex(pgm_read_byte(&pgm_styleData[offsetIntoStyleData]));
+      break;
+    }
     default:
       Assert(false, F("VisualStyleType not implemented!"));
   }
