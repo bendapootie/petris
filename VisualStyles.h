@@ -27,6 +27,7 @@ enum class VisualStyle : uint8
   TronSquare,
   TronAngled,
   SimpleDither,
+  ShadedDither,
 
   Count,
 };
@@ -41,6 +42,7 @@ const char k_styleName6[] PROGMEM = "Plus";
 const char k_styleName7[] PROGMEM = "TronSquare";
 const char k_styleName8[] PROGMEM = "TronAngled";
 const char k_styleName9[] PROGMEM = "SimpleDither";
+const char k_styleName10[] PROGMEM = "ShadedDither";
 
 // For accessing an array of strings in program memory, see...
 // http://www.nongnu.org/avr-libc/user-manual/pgmspace.html
@@ -56,6 +58,7 @@ PGM_P const k_styleNames[] PROGMEM =
   k_styleName7,
   k_styleName8,
   k_styleName9,
+  k_styleName10,
 };
 static_assert(countof(k_styleNames) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
@@ -171,6 +174,54 @@ constexpr uint8 PROGMEM k_styleDataSimpleDither[] =
 };
 static_assert(countof(k_styleDataSimpleDither) == k_perBlockAndOrientationStyleTotalSize);
 
+constexpr uint8 PROGMEM k_styleDataShadedDither[] =
+{
+  uint8(VisualStyleType::PerOrientationAndBlock),
+  // Piece order - O, I, T, L, J, S, Z,
+  // O-Block
+  uint8(BlockIndex::ShadedDitherSmallCapSW), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherSmallCapNE),
+  uint8(BlockIndex::ShadedDitherSmallCapNW), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherSmallCapSE),
+  uint8(BlockIndex::ShadedDitherSmallCapNE), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherSmallCapSW),
+  uint8(BlockIndex::ShadedDitherSmallCapSE), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherSmallCapNW),
+
+  // I-Block
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherLargeCapNE),
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherLargeCapSW),
+  uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherLargeCapNW),
+  uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherLargeCapNW),
+
+  // T-Block
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherMediumCapNW),
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherMediumCapNE),
+  uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherMediumCapSW),
+  uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherMediumCapNW),
+
+  // L-Block
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherLargeCapNW),
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherLargeCapNE),
+  uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherLargeCapSW),
+  uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherLargeCapNW),
+
+  // J-Block
+  uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherLargeCapNW),
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherLargeCapNE),
+  uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherLargeCapSW),
+  uint8(BlockIndex::X), uint8(BlockIndex::O), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherLargeCapNW),
+
+  // S-Block
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherSmallCapSE), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherLargeCapNE),
+  uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherSmallCapSW), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherLargeCapSW),
+  uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherSmallCapNW), uint8(BlockIndex::X), uint8(BlockIndex::ShadedDitherLargeCapNW),
+  uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherSmallCapNE), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherLargeCapNW),
+
+  // Z-Block
+  uint8(BlockIndex::ShadedDitherSmallCapSW), uint8(BlockIndex::ShadedDitherMediumCapNE), uint8(BlockIndex::ShadedDitherLargeCapNW), uint8(BlockIndex::ShadedDitherMediumCapNE),
+  uint8(BlockIndex::ShadedDitherSmallCapNW), uint8(BlockIndex::ShadedDitherMediumCapSW), uint8(BlockIndex::ShadedDitherLargeCapNW), uint8(BlockIndex::X),
+  uint8(BlockIndex::ShadedDitherSmallCapNE), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherLargeCapNE), uint8(BlockIndex::ShadedDitherMediumCapSW),
+  uint8(BlockIndex::ShadedDitherSmallCapSE), uint8(BlockIndex::ShadedDitherMediumCapNW), uint8(BlockIndex::ShadedDitherLargeCapSW), uint8(BlockIndex::ShadedDitherMediumCapNW),
+};
+static_assert(countof(k_styleDataSimpleDither) == k_perBlockAndOrientationStyleTotalSize);
+
 
 constexpr const uint8* k_visualStyles[] PROGMEM =
 {
@@ -183,7 +234,8 @@ constexpr const uint8* k_visualStyles[] PROGMEM =
   StyleDataPlus,
   k_styleDataTronSquare,
   k_styleDataTronAngled,
-  k_styleDataSimpleDither
+  k_styleDataSimpleDither,
+  k_styleDataShadedDither
 };
 static_assert(countof(k_visualStyles) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
