@@ -1219,16 +1219,27 @@ void CurrentPiece::MoveDown(bool trySoftDrop)
     {
       if (TryMove(0, -1))
       {
-        // Piece moved one line down. Subtract any remaining ticks to fall from the total to count and continue looping.
-        ticksToSubtract -= m_ticksToFall;
-        m_ticksToFall = g_gameMode.GetFallTime();
-
-        // If piece moved down, check if it's a new lowest. If so, reset the lock down timer and move counter
+        // The piece moved down... check if it's a new lowest. If so, reset the lock down timer and move counter
         if (m_y < m_lockDownLowestY)
         {
           m_lockDownLowestY = m_y;
           m_lockDownTickTimer = k_defaultLockDownDelay;
           m_lockDownMoveCounter = k_defaultLockDownMoveCount;
+        }
+        
+        // Piece moved one line down. Subtract any remaining ticks to fall from the total to count and continue looping.
+        ticksToSubtract -= m_ticksToFall;
+
+        // Check if the piece is now resting on a surface
+        if(GetPieceData().DoesPieceFitInGrid(m_orientation, m_x, m_y - 1))
+        {
+          // The piece can continue to fall, so reset the m_ticksToFall timer
+          m_ticksToFall = g_gameMode.GetFallTime();
+        }
+        else
+        {
+          // The piece is resting on something else, zero-out m_ticksToFall to ensure the tick timer is decremented next frame
+          m_ticksToFall = 0;
         }
       }
       else

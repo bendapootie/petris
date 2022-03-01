@@ -97,3 +97,14 @@ West  = (1 - (bit / 4), bit % 4      )
 
 ```
 
+
+# Drop Speed
+Level 1 - 1s per block; 0.045s per block soft drop
+Level 2 - 0.792s per block
+Level 6 - 0.260s per block
+Level 14 - 0.012s per block
+
+- 0.5s to lock in once touching the ground	
+- 0.07 - 0.10s delay between lock and next piece appears
+- 0.4s to remove lines
+
