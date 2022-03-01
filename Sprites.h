@@ -75,6 +75,26 @@ enum class BlockIndex : uint8
   ShadedDitherMediumCapSE = 0x2E, // Unused
   ShadedDitherMediumCapSW = 0x2F,
 
+  LineCapN = 0x30,
+  LineCapE = 0x31,
+  LineCapS = 0x32,
+  LineCapW = 0x33,
+
+  LineCornerNE = 0x34,
+  LineCornerSE = 0x35,
+  LineCornerSW = 0x36,
+  LineCornerNW = 0x37,
+
+  LineTeeN = 0x38,
+  LineTeeE = 0x39,
+  LineTeeS = 0x3A,
+  LineTeeW = 0x3B,
+
+  LineStraightNS = 0x3C,
+  LineStraightEW = 0x3D,
+  LineStraightSN = 0x3E,
+  LineStraightWE = 0x3F,
+
   Count
 };
 
@@ -339,6 +359,88 @@ constexpr uint8 PROGMEM BlockSprites[] =
   OOO,
   OO_,  // SW medium cap
   O_O,
+
+  // LineCapN = 0x30,
+  ___,
+  OO_,
+  ___,
+  
+  // LineCapE = 0x31,
+  _O_,
+  _O_,
+  ___,
+
+  // LineCapS = 0x32,
+  ___,
+  _OO,
+  ___,
+  
+  // LineCapW = 0x33,
+  ___,
+  _O_,
+  _O_,
+
+  // LineCornerNE = 0x34,
+  _O_,
+  OO_,
+  ___,
+  
+  // LineCornerSE = 0x35,
+  _O_,
+  _OO,
+  ___,
+  
+  // LineCornerSW = 0x36,
+  ___,
+  _OO,
+  _O_,
+
+  // LineCornerNW = 0x37,
+  ___,
+  OO_,
+  _O_,
+
+  // LineTeeN = 0x38,
+  _O_,
+  _OO,
+  _O_,
+  
+  // LineTeeE = 0x39,
+  ___,
+  OOO,
+  _O_,
+  
+  // LineTeeS = 0x3A,
+  _O_,
+  OO_,
+  _O_,
+  
+  // LineTeeW = 0x3B,
+  _O_,
+  OOO,
+  ___,
+
+
+  // LineStraightNS = 0x3C,
+  ___,
+  OOO,
+  ___,
+  
+  // LineStraightEW = 0x3D,
+  _O_,
+  _O_,
+  _O_,
+  
+  // LineStraightSN = 0x3E,
+  ___,
+  OOO,
+  ___,
+  
+  // LineStraightWE = 0x3F,
+  _O_,
+  _O_,
+  _O_,
+
 };
 
 static_assert(sizeof(BlockSprites) == int(BlockIndex::Count) * BlockSprites[0] * (BlockSprites[1] / 8) + 2,

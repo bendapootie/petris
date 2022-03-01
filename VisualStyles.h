@@ -24,6 +24,7 @@ enum class VisualStyle : uint8
   X,
   O,
   Plus,
+  Line,
   TronSquare,
   TronAngled,
   SimpleDither,
@@ -39,10 +40,11 @@ const char k_styleName3[] PROGMEM = "Dot";
 const char k_styleName4[] PROGMEM = "X";
 const char k_styleName5[] PROGMEM = "O";
 const char k_styleName6[] PROGMEM = "Plus";
-const char k_styleName7[] PROGMEM = "TronSquare";
-const char k_styleName8[] PROGMEM = "TronAngled";
-const char k_styleName9[] PROGMEM = "SimpleDither";
-const char k_styleName10[] PROGMEM = "ShadedDither";
+const char k_styleName7[] PROGMEM = "Line";
+const char k_styleName8[] PROGMEM = "TronSquare";
+const char k_styleName9[] PROGMEM = "TronAngled";
+const char k_styleName10[] PROGMEM = "SimpleDither";
+const char k_styleName11[] PROGMEM = "ShadedDither";
 
 // For accessing an array of strings in program memory, see...
 // http://www.nongnu.org/avr-libc/user-manual/pgmspace.html
@@ -59,6 +61,7 @@ PGM_P const k_styleNames[] PROGMEM =
   k_styleName8,
   k_styleName9,
   k_styleName10,
+  k_styleName11,
 };
 static_assert(countof(k_styleNames) == uint8(VisualStyle::Count), "Make sure data matches the enum");
 
@@ -90,13 +93,27 @@ constexpr const uint8 k_perBlockAndOrientationStyleDataOffset = 1;  // Offset in
 constexpr const uint8 k_perBlockAndOrientationStride = 4 * uint8(PieceOrientation::Count);      // How many bytes are used per piece
 constexpr const uint8 k_perBlockAndOrientationStyleTotalSize = k_perBlockAndOrientationStyleDataOffset + (k_perBlockAndOrientationStride * uint8(PieceIndex::Count));
 
-constexpr uint8 PROGMEM StyleDataSolidBlack[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidBlack)};
-constexpr uint8 PROGMEM StyleDataSolidWhite[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidWhite)};
-constexpr uint8 PROGMEM StyleDataDonut[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::Donut)};
-constexpr uint8 PROGMEM StyleDataCenterDot[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::CenterDot)};
-constexpr uint8 PROGMEM StyleDataX[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::X)};
-constexpr uint8 PROGMEM StyleDataO[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::O)};
-constexpr uint8 PROGMEM StyleDataPlus[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::Plus)};
+constexpr uint8 PROGMEM k_styleDataSolidBlack[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidBlack)};
+constexpr uint8 PROGMEM k_styleDataSolidWhite[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::SolidWhite)};
+constexpr uint8 PROGMEM k_styleDataDonut[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::Donut)};
+constexpr uint8 PROGMEM k_styleDataCenterDot[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::CenterDot)};
+constexpr uint8 PROGMEM k_styleDataX[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::X)};
+constexpr uint8 PROGMEM k_styleDataO[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::O)};
+constexpr uint8 PROGMEM k_styleDataPlus[] = {MakeSolidVisualStyle(VisualStyleType::SolidBlock, BlockIndex::Plus)};
+
+constexpr uint8 PROGMEM k_styleDataLine[] =
+{
+  uint8(VisualStyleType::PerBlockWithRotation),
+  // Piece order - O, I, T, L, J, S, Z,
+  uint8(BlockIndex::LineCornerSW), uint8(BlockIndex::LineCornerSE), uint8(BlockIndex::LineCornerNW), uint8(BlockIndex::LineCornerNE), // O-Block
+  uint8(BlockIndex::LineCapW), uint8(BlockIndex::LineStraightEW), uint8(BlockIndex::LineStraightEW), uint8(BlockIndex::LineCapE), // I-Block
+  uint8(BlockIndex::LineCapW), uint8(BlockIndex::LineTeeN), uint8(BlockIndex::LineCapE), uint8(BlockIndex::LineCapN), // T-Block
+  uint8(BlockIndex::LineCapW), uint8(BlockIndex::LineStraightEW), uint8(BlockIndex::LineCornerSE), uint8(BlockIndex::LineCapN), // L-Block
+  uint8(BlockIndex::LineCornerSW), uint8(BlockIndex::LineStraightEW), uint8(BlockIndex::LineCapE), uint8(BlockIndex::LineCapN), // J-Block
+  uint8(BlockIndex::LineCapW), uint8(BlockIndex::LineCornerSE), uint8(BlockIndex::LineCornerNW), uint8(BlockIndex::LineCapE), // S-Block
+  uint8(BlockIndex::LineCornerSW), uint8(BlockIndex::LineCapE), uint8(BlockIndex::LineCapW), uint8(BlockIndex::LineCornerNE), // Z-Block
+};
+static_assert(countof(k_styleDataLine) == k_perBlockStyleTotalSize);
 
 constexpr uint8 PROGMEM k_styleDataTronSquare[] =
 {
@@ -225,13 +242,14 @@ static_assert(countof(k_styleDataSimpleDither) == k_perBlockAndOrientationStyleT
 
 constexpr const uint8* k_visualStyles[] PROGMEM =
 {
-  StyleDataSolidBlack,
-  StyleDataSolidWhite,
-  StyleDataDonut,
-  StyleDataCenterDot,
-  StyleDataX,
-  StyleDataO,
-  StyleDataPlus,
+  k_styleDataSolidBlack,
+  k_styleDataSolidWhite,
+  k_styleDataDonut,
+  k_styleDataCenterDot,
+  k_styleDataX,
+  k_styleDataO,
+  k_styleDataPlus,
+  k_styleDataLine,
   k_styleDataTronSquare,
   k_styleDataTronAngled,
   k_styleDataSimpleDither,
