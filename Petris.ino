@@ -87,6 +87,7 @@ constexpr uint8 k_defaultLockDownMoveCount = 15;
 constexpr GameTicks k_autoRepeatFirstDelayTicks = 36; // 36 ticks = 9 frames @ 60fps = 0.15s
 // Guideline: ~0.5s to move Tetrimino from one side to the other.
 constexpr GameTicks k_autoRepeatContinueDelayTicks = 12; // 12 ticks = 3 frames @ 60fps = 0.05s
+constexpr GameTicks k_ticksBetweenLockDownAndNextPiece = SecondsToGameTicks(0.1f);  // 0.1s == 24 ticks == 6 frames
 
 //     Top of screen (0)-- *                              *
 //                         *                              *
@@ -127,6 +128,13 @@ enum class GameState : uint8
   MainMenu,
   Playing,
   GameOver,
+};
+
+enum class PlayingState : uint8
+{
+  MovingPiece,
+  ClearingLines,
+  NextPieceDelay,
 };
 
 enum class GameOverReason : uint8
@@ -480,6 +488,11 @@ class Next g_next;
 class Controller g_controller;
 class GameMode g_gameMode;
 class Menus g_menus;
+// TODO: Move these into some container class
+PlayingState g_playingState;
+// Timer used by the current playing state. Its use depends on the state.
+// Could be merged with "m_ticksToFall" if things were refactored
+GameTicks g_playingStateTimer;
 
 // "I" Piece Rotations
 const RotationOffsets k_rotationOffsetsI = {{
@@ -803,6 +816,9 @@ void ResetGame()
   g_controller.Reset();
 
   g_menus.Reset();
+
+  g_playingState = PlayingState::MovingPiece;
+  g_playingStateTimer = 0;  // Unused at the beginning
 }
 
 void Menus::Loop()
@@ -910,42 +926,83 @@ void Menus::ProcessInput()
 
 void PlayingLoop()
 {
-  GameOverReason gameOverReason = GameOverReason::None;
-
-  // "Hold" piece support
-  PieceIndex knownNextPiece = PieceIndex::Invalid;
-  if (g.GetInput().WasButtonPressed(k_holdButton))
+  switch (g_playingState)
   {
-    // Hold is allowed to be used once per drop. It won't do anything if it's already been used.
-    knownNextPiece = g_currentPiece.TryHold();
-  }
-
-  if (!g_currentPiece.IsValidPiece())
-  {
-    // Test for, and remove full lines
-    g_grid.ProcessFullLines();
-    const bool spawnSuccess = g_currentPiece.SpawnNewPiece(knownNextPiece);
-    if (!spawnSuccess)
-    {
-      gameOverReason = GameOverReason::BlockOut;
-    }
-  }
-
-  if (gameOverReason == GameOverReason::None)
-  {
-    g_controller.ProcessInput();
-    g_currentPiece.MoveDown(g_controller.IsSoftDrop());
-  }
-  else
-  {
-    // TODO: Should I add more proper state management? ie. a real state machine?
-    g_gameState = GameState::GameOver;
+    case PlayingState::MovingPiece:
+      PlayingLoopMovingPiece();
+      break;
+    case PlayingState::ClearingLines:
+      PlayingLoopClearingLines();
+      break;
+    case PlayingState::NextPieceDelay:
+      PlayingLoopNextPieceDelay();
+      break;
   }
 
   // TODO: Don't draw the entire grid every frame when it hasn't changed
   g_grid.Draw();
   g_currentPiece.DrawShadow();
   g_currentPiece.Draw();
+}
+
+void PlayingLoopMovingPiece()
+{
+  // "Hold" piece support
+  if (g.GetInput().WasButtonPressed(k_holdButton))
+  {
+    // Hold is allowed to be used once per drop. It won't do anything if it's already been used.
+    PieceIndex knownNextPiece = g_currentPiece.TryHold();
+    if (knownNextPiece != PieceIndex::Invalid)
+    {
+      // Swap out current piece with next
+      const bool spawnSuccess = g_currentPiece.SpawnNewPiece(knownNextPiece);
+      if (!spawnSuccess)
+      {
+        // Game Over because of BlockOut
+        // Getting blocked-out because of switching to your held piece is possible, but likely very rare
+        g_gameState = GameState::GameOver;
+      }
+    }
+  }
+  
+  if (g_currentPiece.IsValidPiece())
+  {
+    g_controller.ProcessInput();
+    g_currentPiece.MoveDown(g_controller.IsSoftDrop());
+  }
+  else
+  {
+    // Test for, and remove full lines
+    g_grid.ProcessFullLines();
+    // Get ready for the next piece
+    g_playingState = PlayingState::NextPieceDelay;
+    g_playingStateTimer = k_ticksBetweenLockDownAndNextPiece;
+  }
+}
+
+void PlayingLoopClearingLines()
+{
+  
+}
+
+void PlayingLoopNextPieceDelay()
+{
+  if (g_playingStateTimer > k_gameTicksPerFrame)
+  {
+    // Count down timer to spawn next piece
+    g_playingStateTimer -= k_gameTicksPerFrame;
+  }
+  else
+  {
+    // Spawn a new piece from the default randomization system
+    const bool spawnSuccess = g_currentPiece.SpawnNewPiece();
+    if (!spawnSuccess)
+    {
+      // Game Over because of BlockOut
+      g_gameState = GameState::GameOver;
+    }
+    g_playingState = PlayingState::MovingPiece;
+  }
 }
 
 void GameOverLoop()
@@ -1005,19 +1062,32 @@ void Grid::DebugPrint(const char* msg) const
 void Grid::Draw() const
 {
   DebugStack;
-  // Draw border lines
-  arduboy.drawLine(k_borderLeftPos, 0, k_borderLeftPos, k_borderBottomPos, WHITE);
-  arduboy.drawLine(k_borderRightPos, 0, k_borderRightPos, k_borderBottomPos, WHITE);
-  arduboy.drawLine(k_borderLeftPos, k_borderBottomPos, k_borderRightPos, k_borderBottomPos, WHITE);
 
+  // Hack to make the grid shake slightly when a piece is locked in
+  // Not sure how much I like the visuals... I definitely don't like how it's implemented
+  uint8 gridBottom = k_gridBottomPos;
+  if (g_playingState == PlayingState::NextPieceDelay)
+  {
+    constexpr uint8 numFramesShift = 1;
+    if (g_playingStateTimer >= k_ticksBetweenLockDownAndNextPiece - (numFramesShift * k_gameTicksPerFrame))
+    {
+      gridBottom += 1;
+    }
+  }
+  
   // Draw blocks
   for (uint8 y = 0; y < k_gridHeight; y++)
   {
     for (uint8 x = 0; x < k_gridWidth; x++)
     {
-      DrawBlock(x, y, Get(x, y), k_gridLeftPos, k_gridBottomPos);
+      DrawBlock(x, y, Get(x, y), k_gridLeftPos, gridBottom);
     }
   }
+  
+  // Draw border lines
+  arduboy.drawLine(k_borderLeftPos, 0, k_borderLeftPos, k_borderBottomPos, WHITE);
+  arduboy.drawLine(k_borderRightPos, 0, k_borderRightPos, k_borderBottomPos, WHITE);
+  arduboy.drawLine(k_borderLeftPos, k_borderBottomPos, k_borderRightPos, k_borderBottomPos, WHITE);
 }
 
 void Grid::ProcessFullLines()
