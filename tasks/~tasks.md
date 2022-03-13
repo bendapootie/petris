@@ -9,11 +9,11 @@
 - [x] 8) 7-Bucket
 - [x] 9) Hold
 	- [x] Show Hold Piece
-- [ ] 10)Piece visuals
+- [x] 10)Piece visuals
 - [ ] 11) Track and display stats
-	- [ ] Lines completed
-	- [ ] Piece distribution
-	- [ ] Line stats
+	- [x] Lines completed ([Issue 13](https://github.com/bendapootie/petris/issues/13))
+	- [x] Track line stats (num singles, doubles, triples, quads) ([Issue 14](https://github.com/bendapootie/petris/issues/14))
+	- [ ] Display line stats at end of game
 - [ ] 12) Increase level on line counts
 - [ ] 13) Score (basic)
 - [ ] 14) Score (advanced)

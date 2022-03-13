@@ -121,6 +121,7 @@ constexpr uint8 k_nextDisplayBottomPos = ((2 + k_numNextPiecesToShow) * 3) * k_b
 constexpr uint8 k_holdDisplayLeft = k_gridLeftPos - (6 * k_blockWidth);
 constexpr uint8 k_holdDisplayBottom = 3 * k_blockHeight;
 
+constexpr uint8 k_minStartingLevel = 1;
 constexpr uint8 k_maxStartingLevel = 19;
 
 enum class GameState : uint8
@@ -156,6 +157,15 @@ enum class RotationFormula : uint8
 {
   Rotation2x4,
   Rotation2x3,
+};
+
+enum class GameplayStats : uint8
+{
+  Single,
+  Double,
+  Triple,
+  Quad,
+  Count
 };
 
 class Random
@@ -399,10 +409,57 @@ public:
   // Returns how many GameTicks it takes for a piece to fall one line with no input
   GameTicks GetFallTime() const;
 
-  void Reset() { m_level = 0; }
+  void Reset()
+  {
+    // Zero out structure
+    memset(this, 0x00, sizeof(*this));
+  }
   void SetLevel(uint8 level) { m_level = level; }
   void NextLevel() { m_level++; }
+  
+  void TrackLinesCompleted(uint8 lines)
+  {
+    Assert(lines <= 4);
+    m_totalLines += lines;
+    TrackStat(GameplayStats(uint8(GameplayStats::Single) + (lines - 1)));
+  }
+
+  // Add score and/or track stats for the given gameplay action
+  void TrackStat(GameplayStats stat)
+  {
+    Assert(uint8(stat) < uint8(GameplayStats::Count));
+    m_stats[uint8(stat)]++;
+
+    // Calculate and update score
+    uint32 perLevelScoreScalar = 0;
+    switch (stat)
+    {
+      case GameplayStats::Single:
+        perLevelScoreScalar = 100;
+        break;
+      case GameplayStats::Double:
+        perLevelScoreScalar = 300;
+        break;
+      case GameplayStats::Triple:
+        perLevelScoreScalar = 500;
+        break;
+      case GameplayStats::Quad:
+        perLevelScoreScalar = 800;
+        break;
+    }
+    Assert(m_level > 0, "Level is 1-based and should never be 0 here");
+    m_score += perLevelScoreScalar * m_level;
+  }
+
+  // Draws #Lines and Score on screen
+  void DrawStats() const;
+  
 private:
+  uint32 m_score;
+  uint16 m_totalLines;
+  // Number of singles, doubles, triples, and quad lines completed
+  uint16 m_stats[uint8(GameplayStats::Count)];
+  // Minimum level is 1. A value of 0 here is invalid.
   uint8 m_level;
 };
 
@@ -412,7 +469,7 @@ public:
   void Reset()
   {
     m_selectedIndex = 0;
-    m_startingLevel = 0;
+    m_startingLevel = k_minStartingLevel;
   }
 
   void Loop();
@@ -857,7 +914,7 @@ void Menus::Loop()
       {
         m_startingLevel++;
       }
-      if ((m_startingLevel > 0) && goBack)
+      if ((m_startingLevel > k_minStartingLevel) && goBack)
       {
         m_startingLevel--;
       }
@@ -943,6 +1000,7 @@ void PlayingLoop()
   g_grid.Draw();
   g_currentPiece.DrawShadow();
   g_currentPiece.Draw();
+  g_gameMode.DrawStats();
 }
 
 void PlayingLoopMovingPiece()
@@ -1119,6 +1177,11 @@ void Grid::ProcessFullLines()
     {
       Set(x, y, BlockIndex::Empty);
     }
+  }
+
+  if (numCleared > 0)
+  {
+    g_gameMode.TrackLinesCompleted(numCleared);
   }
 }
 
@@ -1717,6 +1780,25 @@ uint8 GameMode::GetFallTime() const
   };
   constexpr uint8 k_numFallSpeeds = countof(k_fallSpeeds) - 1;
 
-  // If m_level is bigger than the above array supports, clamp to the last (fastest) value
-  return pgm_read_byte_near(k_fallSpeeds + Min(m_level, k_numFallSpeeds));
+  // m_level is 0-based, but the array uses 0-based indices, so we need to subtract 1 to convert between the two spaces
+  const uint8 levelIndex = m_level - 1;
+  
+  // If levelIndex is bigger than the above array supports, clamp to the last (fastest) value
+  return pgm_read_byte_near(k_fallSpeeds + Min(levelIndex, k_numFallSpeeds));
+}
+
+void GameMode::DrawStats() const
+{
+  arduboy.setTextBackground(BLACK);
+  arduboy.setTextColor(WHITE);
+  arduboy.setCursorX(0);
+  arduboy.setCursorY(16);
+  arduboy.print(F("Score\n"));
+  arduboy.print(m_score);
+  arduboy.print(F("\n"));
+  arduboy.print(F("Level\n"));
+  arduboy.print(m_level);
+  arduboy.print(F("\n"));
+  arduboy.print(F("Lines\n"));
+  arduboy.print(m_totalLines);
 }
