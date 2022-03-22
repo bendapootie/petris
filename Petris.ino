@@ -420,8 +420,17 @@ public:
   void TrackLinesCompleted(uint8 lines)
   {
     Assert(lines <= 4);
+
+    const uint8 previousLinesDiv10 = m_totalLines / 10;
     m_totalLines += lines;
     TrackStat(GameplayStats(uint8(GameplayStats::Single) + (lines - 1)));
+
+    // If total lines crossed the next multiple of 10, increase the level
+    const uint8 newLinesDiv10 = m_totalLines / 10;
+    if (newLinesDiv10 > previousLinesDiv10)
+    {
+      NextLevel();
+    }
   }
 
   // Add score and/or track stats for the given gameplay action
