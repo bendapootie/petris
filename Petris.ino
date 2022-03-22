@@ -123,6 +123,7 @@ constexpr uint8 k_holdDisplayBottom = 3 * k_blockHeight;
 
 constexpr uint8 k_minStartingLevel = 1;
 constexpr uint8 k_maxStartingLevel = 19;
+constexpr uint8 k_maxLevel = 19;
 
 enum class GameState : uint8
 {
@@ -415,7 +416,14 @@ public:
     memset(this, 0x00, sizeof(*this));
   }
   void SetLevel(uint8 level) { m_level = level; }
-  void NextLevel() { m_level++; }
+  void NextLevel()
+  {
+    // Don't let level go out of bounds
+    if (m_level < k_maxLevel)
+    {
+      m_level++;
+    }
+  }
   
   void TrackLinesCompleted(uint8 lines)
   {
